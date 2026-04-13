@@ -34,19 +34,20 @@ fn setup_with_spec_examples(name: &str) -> (PathBuf, TuiSession) {
     .unwrap();
 
     // List files (from spec examples)
+    // Filenames use numeric prefixes for alphabetical sorting (v2.0.0: sorted by path, not order field)
     fs::write(
-        root.join("lists.d/today.list"),
-        "---\nname: Today\nicon: 📅\norder: 1\n---\ndue <= today\nOR\nscheduled <= today\n\nsort by priority desc\nsort by due asc\n",
+        root.join("lists.d/1 Today.list"),
+        "---\nname: Today\nicon: 📅\n---\ndue <= today\nOR\nscheduled <= today\n\nsort by priority desc\nsort by due asc\n",
     )
     .unwrap();
     fs::write(
-        root.join("lists.d/inbox.list"),
-        "---\nname: Inbox\nicon: 📥\norder: 2\n---\nno due\nno scheduled\nno starting\n\nsort by priority desc\nsort by creation_date asc\n",
+        root.join("lists.d/2 Inbox.list"),
+        "---\nname: Inbox\nicon: 📥\n---\nno due\nno scheduled\nno starting\n\nsort by priority desc\nsort by creation_date asc\n",
     )
     .unwrap();
     fs::write(
-        root.join("lists.d/upcoming.list"),
-        "---\nname: Upcoming\nicon: 📆\norder: 3\n---\ndue > today\nOR\nscheduled > today\nOR\nstarting > today\n\nsort by due asc\ngroup by due\n",
+        root.join("lists.d/3 Upcoming.list"),
+        "---\nname: Upcoming\nicon: 📆\n---\ndue > today\nOR\nscheduled > today\nOR\nstarting > today\n\nsort by due asc\ngroup by due\n",
     )
     .unwrap();
 
@@ -60,7 +61,7 @@ fn sidebar_shows_smart_lists_in_order() {
     let items = session.sidebar_items();
 
     // First three items should be SmartList(0), SmartList(1), SmartList(2)
-    // ordered by the `order` field in their frontmatter: Today(1), Inbox(2), Upcoming(3)
+    // ordered alphabetically by filename: 1 Today, 2 Inbox, 3 Upcoming
     assert_eq!(items[0], SidebarItem::SmartList(0));
     assert_eq!(items[1], SidebarItem::SmartList(1));
     assert_eq!(items[2], SidebarItem::SmartList(2));

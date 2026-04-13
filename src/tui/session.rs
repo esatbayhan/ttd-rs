@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io;
 use std::path::PathBuf;
 
@@ -39,7 +39,9 @@ impl ViewOverrides {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SidebarItem {
     SmartList(usize),
+    GroupHeader(Vec<String>),
     Separator,
+    ListsHeader,
     ProjectsHeader,
     Project(String),
     ContextsHeader,
@@ -128,6 +130,7 @@ pub struct TuiSession {
     task_scroll_override: Option<u16>,
     fs_index: Option<SnapshotIndex>,
     view_overrides: ViewOverrides,
+    collapsed_groups: HashSet<Vec<String>>,
 }
 
 impl TuiSession {
@@ -159,6 +162,7 @@ impl TuiSession {
             task_scroll_override: None,
             fs_index: None,
             view_overrides: ViewOverrides::new(),
+            collapsed_groups: HashSet::new(),
         }
     }
 
@@ -182,6 +186,7 @@ impl TuiSession {
             task_scroll_override: None,
             fs_index,
             view_overrides: ViewOverrides::new(),
+            collapsed_groups: HashSet::new(),
         };
         session.rebuild();
         Ok(session)
@@ -224,6 +229,10 @@ impl TuiSession {
 
     pub fn view_overrides(&self) -> &ViewOverrides {
         &self.view_overrides
+    }
+
+    pub fn collapsed_groups(&self) -> &HashSet<Vec<String>> {
+        &self.collapsed_groups
     }
 
     pub fn override_indicator(&self) -> String {
@@ -513,7 +522,7 @@ impl TuiSession {
     }
 
     fn rebuild(&mut self) {
-        self.sidebar_items = build_sidebar_items(&self.smart_lists, &self.snapshot);
+        self.sidebar_items = build_sidebar_items(&self.smart_lists, &self.snapshot, &self.collapsed_groups);
         if !self.sidebar_items.contains(&self.active_sidebar_item) {
             self.active_sidebar_item = self
                 .sidebar_items
@@ -522,6 +531,7 @@ impl TuiSession {
                     matches!(
                         item,
                         SidebarItem::SmartList(_)
+                            | SidebarItem::GroupHeader(_)
                             | SidebarItem::Project(_)
                             | SidebarItem::Context(_)
                     )
@@ -729,6 +739,17 @@ impl TuiSession {
                 self.rebuild_visible_tasks();
                 self.reselect_task(wanted);
             }
+            AppAction::ToggleGroup => {
+                if let SidebarItem::GroupHeader(path) = &self.active_sidebar_item {
+                    let path = path.clone();
+                    if self.collapsed_groups.contains(&path) {
+                        self.collapsed_groups.remove(&path);
+                    } else {
+                        self.collapsed_groups.insert(path);
+                    }
+                    self.rebuild();
+                }
+            }
             AppAction::OpenSortPicker | AppAction::OpenGroupPicker => {}
             _ => {}
         }
@@ -812,7 +833,8 @@ impl TuiSession {
             .iter()
             .enumerate()
             .filter_map(|(index, item)| match item {
-                SidebarItem::ProjectsHeader
+                SidebarItem::ListsHeader
+                | SidebarItem::ProjectsHeader
                 | SidebarItem::ContextsHeader
                 | SidebarItem::Separator => None,
                 _ => Some(index),
@@ -968,17 +990,60 @@ fn snapshot_contains_task(snapshot: &Snapshot, wanted: &TaskId) -> bool {
 fn build_sidebar_items(
     smart_lists: &[crate::smartlist::SmartList],
     snapshot: &Snapshot,
+    collapsed: &HashSet<Vec<String>>,
 ) -> Vec<SidebarItem> {
-    let mut items: Vec<SidebarItem> = smart_lists
-        .iter()
-        .enumerate()
-        .map(|(index, _)| SidebarItem::SmartList(index))
-        .collect();
+    let mut items: Vec<SidebarItem> = Vec::new();
 
+    // 1. Root-level smart lists (empty group_path) — "pinned"
+    for (index, list) in smart_lists.iter().enumerate() {
+        if list.group_path.is_empty() {
+            items.push(SidebarItem::SmartList(index));
+        }
+    }
+
+    // 2. Collect unique group path prefixes, sorted
+    let mut all_prefixes: BTreeSet<Vec<String>> = BTreeSet::new();
+    for list in smart_lists {
+        if !list.group_path.is_empty() {
+            // Add all prefixes: for ["work", "client-a"], add ["work"] and ["work", "client-a"]
+            for depth in 1..=list.group_path.len() {
+                all_prefixes.insert(list.group_path[..depth].to_vec());
+            }
+        }
+    }
+
+    // 3. Grouped lists section (if any groups exist)
+    if !all_prefixes.is_empty() {
+        items.push(SidebarItem::Separator);
+        items.push(SidebarItem::ListsHeader);
+
+        for prefix in &all_prefixes {
+            // Check if any ancestor is collapsed — if so, skip this prefix entirely
+            let ancestor_collapsed = (1..prefix.len()).any(|d| collapsed.contains(&prefix[..d].to_vec()));
+            if ancestor_collapsed {
+                continue;
+            }
+
+            items.push(SidebarItem::GroupHeader(prefix.clone()));
+
+            // If this group is collapsed, skip its children
+            if collapsed.contains(prefix) {
+                continue;
+            }
+
+            // Add smart lists whose group_path matches this prefix exactly
+            for (index, list) in smart_lists.iter().enumerate() {
+                if list.group_path == *prefix {
+                    items.push(SidebarItem::SmartList(index));
+                }
+            }
+        }
+    }
+
+    // 4. Projects section
     if !items.is_empty() {
         items.push(SidebarItem::Separator);
     }
-
     items.push(SidebarItem::ProjectsHeader);
 
     let mut projects = BTreeSet::new();
@@ -1052,19 +1117,16 @@ fn filter_snapshot(
                 })
                 .collect()
         }
-        SidebarItem::ProjectsHeader | SidebarItem::ContextsHeader | SidebarItem::Separator => {
-            Vec::new()
-        }
+        SidebarItem::GroupHeader(_)
+        | SidebarItem::ListsHeader
+        | SidebarItem::ProjectsHeader
+        | SidebarItem::ContextsHeader
+        | SidebarItem::Separator => Vec::new(),
     }
 }
 
 fn needs_done_tasks(list: &crate::smartlist::SmartList) -> bool {
-    list.blocks.iter().any(|block| {
-        block
-            .conditions
-            .iter()
-            .any(|c| matches!(c, crate::smartlist::Condition::DoneFilter { done: true }))
-    })
+    crate::smartlist::has_done_filter(list)
 }
 
 fn apply_search_filter(tasks: Vec<StoredTask>, query: &str) -> Vec<StoredTask> {

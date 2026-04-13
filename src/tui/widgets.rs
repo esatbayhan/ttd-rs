@@ -66,6 +66,7 @@ fn help_bar_entries(app: &AppState) -> Vec<(&'static str, &'static str)> {
     vec![
         ("j/k", "nav"),
         ("h/l", "focus"),
+        ("spc", "toggle"),
         ("a", "add"),
         ("e", "edit"),
         ("x", "toggle done"),

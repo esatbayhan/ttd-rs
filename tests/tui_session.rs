@@ -9,12 +9,12 @@ fn write_standard_lists(root: &std::path::Path) {
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
     fs::write(
-        lists_dir.join("inbox.list"),
+        lists_dir.join("1 inbox.list"),
         "---\nname: Inbox\norder: 1\n---\nno due\nno scheduled\nno starting\n",
     )
     .unwrap();
     fs::write(
-        lists_dir.join("done.list"),
+        lists_dir.join("2 done.list"),
         "---\nname: Done\norder: 5\n---\ndone\n",
     )
     .unwrap();

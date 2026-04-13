@@ -19,7 +19,7 @@ fn stored(raw: &str) -> StoredTask {
 
 fn make_list(body: &str) -> ttd::smartlist::SmartList {
     let content = format!("---\nname: Test\n---\n{}", body);
-    parse_list(&content, &PathBuf::from("test.list"))
+    parse_list(&content, &PathBuf::from("lists.d/test.list"), std::path::Path::new("lists.d"))
 }
 
 // ── Evaluate tests ────────────────────────────────────────────────────────────

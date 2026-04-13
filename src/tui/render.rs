@@ -130,12 +130,14 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
                 _ if *item == session.active_sidebar_item() => {
                     Style::default().add_modifier(Modifier::BOLD)
                 }
-                SidebarItem::ProjectsHeader
+                SidebarItem::GroupHeader(_)
+                | SidebarItem::ListsHeader
+                | SidebarItem::ProjectsHeader
                 | SidebarItem::ContextsHeader
                 | SidebarItem::Separator => Style::default().add_modifier(Modifier::DIM),
                 _ => Style::default(),
             };
-            ListItem::new(sidebar_label(item, session.smart_lists())).style(style)
+            ListItem::new(sidebar_label(item, session.smart_lists(), session.collapsed_groups())).style(style)
         })
         .collect::<Vec<_>>();
 
@@ -550,17 +552,38 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
     }
 }
 
-fn sidebar_label(item: &SidebarItem, smart_lists: &[crate::smartlist::SmartList]) -> String {
+fn sidebar_label(
+    item: &SidebarItem,
+    smart_lists: &[crate::smartlist::SmartList],
+    collapsed_groups: &std::collections::HashSet<Vec<String>>,
+) -> String {
     match item {
         SidebarItem::SmartList(index) => {
             if let Some(list) = smart_lists.get(*index) {
                 let icon = list.icon.as_deref().unwrap_or("\u{25c6}"); // ◆ default
-                format!("{icon} {}", list.name)
+                let indent = if list.group_path.is_empty() {
+                    String::new()
+                } else {
+                    "  ".repeat(list.group_path.len())
+                };
+                format!("{indent}{icon} {}", list.name)
             } else {
                 "?".to_string()
             }
         }
+        SidebarItem::GroupHeader(path) => {
+            let depth = path.len().saturating_sub(1);
+            let indent = "  ".repeat(depth);
+            let indicator = if collapsed_groups.contains(path) {
+                "\u{25b6}" // ▶
+            } else {
+                "\u{25bc}" // ▼
+            };
+            let name = path.last().cloned().unwrap_or_else(|| "Group".to_string());
+            format!("{indent}{indicator} {name}")
+        }
         SidebarItem::Separator => "──────────────────────".to_string(),
+        SidebarItem::ListsHeader => "LISTS".to_string(),
         SidebarItem::ProjectsHeader => "PROJECTS".to_string(),
         SidebarItem::Project(value) => format!("  {value}"),
         SidebarItem::ContextsHeader => "CONTEXTS".to_string(),
@@ -574,8 +597,12 @@ fn active_filter_title(item: &SidebarItem, smart_lists: &[crate::smartlist::Smar
             .get(*index)
             .map(|l| l.name.clone())
             .unwrap_or_else(|| "Unknown".to_string()),
+        SidebarItem::GroupHeader(path) => {
+            path.last().cloned().unwrap_or_else(|| "Group".to_string())
+        }
         SidebarItem::Project(value) => value.clone(),
         SidebarItem::Context(value) => value.clone(),
+        SidebarItem::ListsHeader => "Lists".to_string(),
         SidebarItem::ProjectsHeader => "Projects".to_string(),
         SidebarItem::ContextsHeader => "Contexts".to_string(),
         SidebarItem::Separator => "Filters".to_string(),

@@ -100,6 +100,7 @@ pub enum AppAction {
     DeactivateGroup,
     ReverseSort,
     PickerSelect,
+    ToggleGroup,
 }
 
 pub struct AppState {
@@ -255,6 +256,7 @@ impl AppState {
                 Some(AppAction::ConfirmDelete)
             }
             "R" => Some(AppAction::Refresh),
+            " " => Some(AppAction::ToggleGroup),
             "n" => Some(AppAction::NextSearchResult),
             "N" => Some(AppAction::PreviousSearchResult),
             _ => None,
