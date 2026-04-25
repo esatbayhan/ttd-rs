@@ -9,15 +9,19 @@ around **2026-04-25** so date-relative smart lists (`Today`, `Upcoming`,
 
 ## How to use
 
-Run the CLI or TUI against the fixture root:
+Run the CLI or TUI against the fixture root. The `--task-dir` flag is a
+one-shot override that does **not** modify your persisted config — handy
+for exploring the fixtures without disturbing your real `~/.config/ttd/`.
 
 ```bash
-cargo run -- list --task-dir fixtures/e2e/todo.txt.d
+cargo run -- --task-dir fixtures/e2e/todo.txt.d list   # CLI
 cargo run -- --task-dir fixtures/e2e/todo.txt.d        # TUI
 ```
 
-Or, in one shell session, point the binary at a copy so destructive
-operations (mark done, edit, delete) don't dirty the repo:
+`TTD_TASK_DIR` works as an alternative to the flag.
+
+To exercise destructive features (mark done, edit, delete) without
+dirtying the repo, copy the fixture to a temp dir first:
 
 ```bash
 cp -r fixtures/e2e/todo.txt.d /tmp/ttd-e2e
@@ -106,7 +110,7 @@ fixtures/e2e/
 | `6 Year End.list`          | **Absolute date anchor:** `due <= 2026-12-31`; `prefill due 2026-12-31-3` (offset on date) |
 | `7 Work Inbox.list`        | `project includes` + `no priority`; **prefill** project + context                          |
 | `8 High Priority.list`     | `priority above C`; multi-key sort (`priority asc`, then `creation_date asc`)              |
-| `9 This Week.list`         | `due <= today + 7` + `not done`; **prefill** priority + due + scheduled                    |
+| `9 This Week.list`         | `due <= today + 7` + `not done`; **prefill** priority + due + scheduled + starting         |
 | `A Group By Project.list`  | `has project`; `group by project asc`, `sort by priority asc` (group + sort)               |
 | `B Excludes Test.list`     | `project excludes Test` + `description excludes Test` (`excludes` operator)                |
 
