@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(command) = cli.command {
         run_command(command, cli.task_dir)?;
     } else {
-        run_tui()?;
+        run_tui(cli.task_dir)?;
     }
 
     Ok(())
@@ -69,9 +69,12 @@ fn run_command(command: Command, cli_task_dir: Option<PathBuf>) -> io::Result<()
     Ok(())
 }
 
-fn run_tui() -> io::Result<()> {
+fn run_tui(cli_task_dir: Option<PathBuf>) -> io::Result<()> {
     let paths = ConfigPaths::discover()?;
-    let launch_mode = LaunchMode::from_disk(&paths)?;
+    let launch_mode = match override_task_dir(cli_task_dir)? {
+        Some(task_dir) => LaunchMode::Main(ttd::config::AppConfig { task_dir }),
+        None => LaunchMode::from_disk(&paths)?,
+    };
     let today = today_date()?;
 
     if env::var_os("TTD_TUI_RENDER_ONCE").is_some() {
@@ -81,6 +84,18 @@ fn run_tui() -> io::Result<()> {
         let session = TuiSession::from_launch_mode(launch_mode, &today)?;
         run_live_tui(session, &paths)
     }
+}
+
+/// Resolve a one-shot task-dir override from `--task-dir` or `TTD_TASK_DIR`.
+/// Returns `None` when neither is set, leaving the launcher to fall back to
+/// the persisted config or the welcome flow. The override is not persisted.
+fn override_task_dir(cli_task_dir: Option<PathBuf>) -> io::Result<Option<PathBuf>> {
+    let candidate = cli_task_dir.or_else(|| env::var_os("TTD_TASK_DIR").map(PathBuf::from));
+    let Some(dir) = candidate else {
+        return Ok(None);
+    };
+    ttd::config::validate_task_dir(&dir)?;
+    Ok(Some(dir))
 }
 
 fn resolve_task_dir(cli_task_dir: Option<PathBuf>) -> io::Result<PathBuf> {

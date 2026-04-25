@@ -141,3 +141,54 @@ fn running_without_a_subcommand_enters_main_mode_when_config_exists() {
     assert!(stdout.contains("Inbox"));
     assert!(!stdout.contains("main mode"));
 }
+
+#[test]
+fn tui_honors_task_dir_flag_overriding_persisted_config() {
+    let root = temp_path("tui-task-dir-flag");
+    let config_home = root.join("config-home");
+    let unused_dir = root.join("unused-todo");
+    let override_dir = root.join("override-todo");
+    fs::create_dir_all(unused_dir.join("done.txt.d")).unwrap();
+    fs::create_dir_all(override_dir.join("done.txt.d")).unwrap();
+    let unused_lists = unused_dir.join("lists.d");
+    let override_lists = override_dir.join("lists.d");
+    fs::create_dir_all(&unused_lists).unwrap();
+    fs::create_dir_all(&override_lists).unwrap();
+    fs::write(
+        unused_lists.join("inbox.list"),
+        "---\nname: ShouldNotAppear\n---\nno due\n",
+    )
+    .unwrap();
+    fs::write(
+        override_lists.join("inbox.list"),
+        "---\nname: OverrideList\n---\nno due\n",
+    )
+    .unwrap();
+
+    fs::create_dir_all(config_home.join("ttd")).unwrap();
+    fs::write(
+        config_home.join("ttd/config.txt"),
+        format!("{}\n", unused_dir.display()),
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_ttd"))
+        .arg("--task-dir")
+        .arg(&override_dir)
+        .env("TTD_TUI_RENDER_ONCE", "1")
+        .env("HOME", root.join("home"))
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "binary failed: {:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("OverrideList"),
+        "expected the --task-dir override list to render, got:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("ShouldNotAppear"),
+        "persisted config should not be loaded when --task-dir is provided; got:\n{stdout}"
+    );
+}
