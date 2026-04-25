@@ -111,6 +111,30 @@ Every release commit that bumps the `Cargo.toml` version must be tagged. Do this
 - TUI tests (`tui_e2e`, `tui_session`, `tui_render`, `tui_mouse`, `tui_editor`) drive the binary through `expectrl` PTY — they are slow and order-sensitive. Run them last when iterating; use `cargo test --test <name>` to scope to one file.
 - Don't mock the filesystem in store/refresh tests — they need real `fs::rename`, `flock`, and mtime behavior to be meaningful.
 
+## End-to-End Fixtures
+
+The drop-in dataset at [fixtures/e2e/](fixtures/e2e/) is the manual / exploratory counterpart to the unit and integration suites. It is one realistic `todo.txt.d/` directory plus a full set of `lists.d/` smart lists, designed so a human (or a smoke-test script) can launch the binary against it and exercise every user-visible feature in one session.
+
+**Maintenance rule:** every change that adds, alters, or removes a user-visible feature must update the e2e fixture set in the same commit (or in the same PR series). This is non-negotiable — the fixture is only useful if it reflects current behavior.
+
+What counts as user-visible:
+
+- A new field on `Task` (parser or model).
+- A new filter, sort, or group field in the smart-list grammar.
+- A new prefill / template-variable / lenient-parsing rule.
+- A new TUI keybinding, sidebar item kind, picker, or editor affordance.
+- A new CLI subcommand or flag.
+- A breaking change to any of the above.
+
+When updating the fixture:
+
+1. Add (or edit) the smallest task `.txt` or `.list` file that demonstrates the new behavior.
+2. Update [fixtures/e2e/README.md](fixtures/e2e/README.md) so the feature appears in the coverage matrix and the relevant table row exists.
+3. If date-relative behavior is involved, anchor the fixture to the README's stated "today" — currently `2026-04-25`. Bumping that anchor is its own coordinated change across all date-bearing fixtures.
+4. Smoke-test: `cargo run -- list --task-dir fixtures/e2e/todo.txt.d` (or launch the TUI) and confirm the new behavior is observable.
+
+Pure refactors and internal-only changes that don't surface to the user are exempt.
+
 ## Adding a New Feature
 
 When adding a feature that touches the task model, smart-list grammar, or sidebar:
@@ -122,5 +146,6 @@ When adding a feature that touches the task model, smart-list grammar, or sideba
 5. **TUI surface.** Wire the field into render and editor only after the underlying layers work.
 6. **CLI surface.** Add the matching flag to `clap` derives in [src/cli.rs](src/cli.rs) for scriptability.
 7. **Docs.** Update the README keybinding table and feature list if user-visible.
+8. **End-to-end fixtures.** Update [fixtures/e2e/](fixtures/e2e/) and its README so the new behavior is exercisable end-to-end (see § End-to-End Fixtures above).
 
 Don't skip layers — adding a TUI shortcut for a field the parser doesn't understand is the kind of half-finished implementation we want to avoid.
