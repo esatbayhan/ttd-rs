@@ -592,10 +592,12 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
 
 fn render_list_viewer(frame: &mut Frame<'_>, viewer: &super::app::ListViewerState) {
     let area = frame.area();
-    // Sized to fit a typical .list file with breathing room; clamped to the
-    // terminal so we never draw outside.
-    let modal_width = area.width.saturating_sub(8).clamp(40, 100);
-    let modal_height = area.height.saturating_sub(4).clamp(10, 30);
+    // Cover the whole frame minus a tiny visual margin so the modal
+    // unambiguously sits on top of the sidebar and task list — leaving
+    // them visible underneath would let icons / overflow text bleed
+    // through the borders on wide terminals.
+    let modal_width = area.width.saturating_sub(2).max(40);
+    let modal_height = area.height.saturating_sub(2).max(10);
     let modal = centered_rect(area, modal_width, modal_height);
 
     let title = format!(" {} — list source ", viewer.list_name);
