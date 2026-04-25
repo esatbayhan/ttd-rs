@@ -28,6 +28,28 @@ cp -r fixtures/e2e/todo.txt.d /tmp/ttd-e2e
 cargo run -- --task-dir /tmp/ttd-e2e
 ```
 
+### Smart-list source viewer
+
+With sidebar focus on a smart list (any of the rows in the sidebar except
+auto-generated `+Project` / `@Context` items), press `e` to open a syntax-
+highlighted view of the underlying `.list` source. Inside the viewer:
+
+- `j` / `k` — scroll
+- `e` — open the file in your `$EDITOR` (resolved as `editor=` config
+  → `$VISUAL` → `$EDITOR` → `vi`/`notepad`); the viewer reloads when
+  the editor exits
+- `esc` / `q` — close
+
+Most fixture lists have prefill / template-variable / lenient-parsing
+content that's worth inspecting through the viewer:
+
+- `7 Work Inbox.list` — multi-key prefill (`project`, `context`)
+- `9 This Week.list` — all four prefill kinds plus relative date offsets
+- `ttd/bugs.list` — `{{dir}}` template variable in both a filter and a
+  prefill value
+- `invalid/dir-out-of-range.list` — out-of-range template; the list is
+  silently invalidated but the viewer still shows the (broken) source
+
 If your binary's "today" doesn't match 2026-04-25, the `Today` /
 `Upcoming` / `Stale` lists may show different counts than this README
 predicts — that's expected.

@@ -331,6 +331,9 @@ fn navigation_and_task_shortcuts_are_routed_to_actions() {
     for (key, expected) in cases {
         let mut app = AppState::new(AppMode::Main);
         if key == "e" {
+            // `e` only resolves to EditTask when the task list is focused;
+            // on the sidebar (default focus) it opens the list viewer.
+            app.focus = FocusArea::TaskList;
             app.selected_task = Some(SelectedTask::new(
                 TaskId {
                     path: PathBuf::from("/tmp/inbox.txt"),

@@ -135,6 +135,14 @@ pub struct TuiSession {
     fs_index: Option<SnapshotIndex>,
     view_overrides: ViewOverrides,
     collapsed_groups: HashSet<Vec<String>>,
+    /// Resolved editor command (e.g. `nvim` or `code -w`); used when the user
+    /// presses `e` to open a smart list externally. May contain spaces; split
+    /// on whitespace to get program + args.
+    editor_command: String,
+    /// Path the main loop should hand off to the external editor on the next
+    /// turn. Set by the session in response to `EditListExternally`; cleared
+    /// when the main loop drains it via `take_pending_external_edit`.
+    pending_external_edit: Option<PathBuf>,
 }
 
 impl TuiSession {
@@ -144,7 +152,12 @@ impl TuiSession {
     ) -> io::Result<Self> {
         match launch_mode {
             crate::bootstrap::LaunchMode::Welcome => Ok(Self::welcome(today)),
-            crate::bootstrap::LaunchMode::Main(config) => Self::open(config.task_dir, today),
+            crate::bootstrap::LaunchMode::Main(config) => {
+                let editor = crate::config::resolve_editor(Some(&config));
+                let mut session = Self::open(config.task_dir, today)?;
+                session.editor_command = editor;
+                Ok(session)
+            }
         }
     }
 
@@ -167,6 +180,8 @@ impl TuiSession {
             fs_index: None,
             view_overrides: ViewOverrides::new(),
             collapsed_groups: HashSet::new(),
+            editor_command: crate::config::resolve_editor(None),
+            pending_external_edit: None,
         }
     }
 
@@ -191,6 +206,8 @@ impl TuiSession {
             fs_index,
             view_overrides: ViewOverrides::new(),
             collapsed_groups: HashSet::new(),
+            editor_command: crate::config::resolve_editor(None),
+            pending_external_edit: None,
         };
         session.rebuild();
         Ok(session)
@@ -413,6 +430,75 @@ impl TuiSession {
         self.rebuild_visible_tasks();
     }
 
+    /// Source-path of the smart list under the active sidebar selection, if
+    /// the active item is a smart list. Returns `None` for project / context /
+    /// header / separator items, which have no `.list` file backing them.
+    fn active_smart_list_source_path(&self) -> Option<PathBuf> {
+        match &self.active_sidebar_item {
+            SidebarItem::SmartList(idx) => {
+                self.smart_lists.get(*idx).map(|l| l.source_path.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Read the active smart list's source from disk and open it in the
+    /// viewer modal. No-op when the active sidebar item is not a smart list
+    /// or the file no longer exists.
+    fn open_list_viewer_for_active_smart_list(&mut self) -> io::Result<()> {
+        let SidebarItem::SmartList(idx) = self.active_sidebar_item.clone() else {
+            return Ok(());
+        };
+        let Some(list) = self.smart_lists.get(idx) else {
+            return Ok(());
+        };
+        let source_path = list.source_path.clone();
+        let list_name = list.name.clone();
+        let content = std::fs::read_to_string(&source_path)?;
+        self.app.list_viewer = Some(crate::tui::app::ListViewerState {
+            list_name,
+            source_path,
+            content,
+            scroll_offset: 0,
+        });
+        Ok(())
+    }
+
+    /// Drain the pending-external-edit signal raised by the session in
+    /// response to the user pressing `e` from the viewer or sidebar. The
+    /// main loop is responsible for suspending the terminal, spawning the
+    /// editor, and calling `reload_after_external_edit` when finished.
+    pub fn take_pending_external_edit(&mut self) -> Option<PathBuf> {
+        self.pending_external_edit.take()
+    }
+
+    /// Resolved editor command (e.g. `nvim` or `code -w`). Whitespace-split
+    /// to get program + args. Set at session construction time from config
+    /// or env-var chain.
+    pub fn editor_command(&self) -> &str {
+        &self.editor_command
+    }
+
+    /// Reload smart lists and re-read the open viewer's content after an
+    /// external edit. Call from the main loop right after the editor child
+    /// process exits.
+    pub fn reload_after_external_edit(&mut self) -> io::Result<()> {
+        if let Some(store) = &self.store {
+            self.smart_lists = crate::smartlist::load_all(&store.lists_dir());
+        }
+        if let Some(viewer) = self.app.list_viewer.as_mut()
+            && let Ok(content) = std::fs::read_to_string(&viewer.source_path)
+        {
+            viewer.content = content;
+            let line_count = viewer.line_count();
+            viewer.scroll_offset = viewer.scroll_offset.min(line_count.saturating_sub(1));
+        }
+        let wanted = self.current_selection_target();
+        self.rebuild();
+        self.reselect_task(wanted);
+        Ok(())
+    }
+
     pub fn dispatch_mouse_sidebar(&mut self, sidebar_index: usize) {
         if let Some(item) = self.sidebar_items.get(sidebar_index).cloned() {
             self.app.focus = FocusArea::Sidebar;
@@ -481,6 +567,7 @@ impl TuiSession {
                 crate::config::validate_task_dir(&task_dir)?;
                 crate::config::AppConfig {
                     task_dir: task_dir.clone(),
+                    editor: None,
                 }
                 .save(paths)?;
                 *self = Self::open(task_dir, &self.today)?;
@@ -770,6 +857,33 @@ impl TuiSession {
                 }
             }
             AppAction::OpenSortPicker | AppAction::OpenGroupPicker => {}
+            AppAction::OpenListViewer => {
+                self.open_list_viewer_for_active_smart_list()?;
+            }
+            AppAction::ScrollListViewer(delta) => {
+                if let Some(viewer) = self.app.list_viewer.as_mut() {
+                    if delta > 0 {
+                        // Use a generous viewport estimate; the renderer clamps
+                        // visually anyway and the real height is only known at
+                        // draw time. Scroll-by-one is the only delta we emit.
+                        viewer.scroll_down(20);
+                    } else {
+                        viewer.scroll_up();
+                    }
+                }
+            }
+            AppAction::CloseListViewer => {}
+            AppAction::EditListExternally => {
+                let path = self
+                    .app
+                    .list_viewer
+                    .as_ref()
+                    .map(|v| v.source_path.clone())
+                    .or_else(|| self.active_smart_list_source_path());
+                if let Some(path) = path {
+                    self.pending_external_edit = Some(path);
+                }
+            }
             _ => {}
         }
 

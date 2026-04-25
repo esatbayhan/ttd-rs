@@ -72,7 +72,10 @@ fn run_command(command: Command, cli_task_dir: Option<PathBuf>) -> io::Result<()
 fn run_tui(cli_task_dir: Option<PathBuf>) -> io::Result<()> {
     let paths = ConfigPaths::discover()?;
     let launch_mode = match override_task_dir(cli_task_dir)? {
-        Some(task_dir) => LaunchMode::Main(ttd::config::AppConfig { task_dir }),
+        Some(task_dir) => LaunchMode::Main(ttd::config::AppConfig {
+            task_dir,
+            editor: None,
+        }),
         None => LaunchMode::from_disk(&paths)?,
     };
     let today = today_date()?;
@@ -266,6 +269,11 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                 };
 
                 session.dispatch_key_with_paths(&key, paths)?;
+                if let Some(path) = session.take_pending_external_edit() {
+                    let editor_cmd = session.editor_command().to_string();
+                    run_external_editor(&mut terminal, &editor_cmd, &path)?;
+                    session.reload_after_external_edit()?;
+                }
             } else {
                 session.poll_refresh()?;
             }
@@ -278,6 +286,35 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
     let _ = crossterm::execute!(io::stdout(), DisableMouseCapture);
     ratatui::restore();
     result
+}
+
+/// Suspend ratatui, hand the terminal over to the spawned editor for the
+/// duration of the child process, and then re-enter the alternate screen and
+/// repaint. Errors from the editor itself are swallowed — exit code !=0
+/// shouldn't crash the TUI mid-session.
+fn run_external_editor(
+    terminal: &mut ratatui::DefaultTerminal,
+    editor_command: &str,
+    path: &std::path::Path,
+) -> io::Result<()> {
+    let parts: Vec<&str> = editor_command.split_whitespace().collect();
+    let Some((program, extra_args)) = parts.split_first() else {
+        return Ok(());
+    };
+
+    let mut stdout = io::stdout();
+    let _ = crossterm::execute!(stdout, DisableMouseCapture, terminal::LeaveAlternateScreen);
+    let _ = terminal::disable_raw_mode();
+
+    let _ = std::process::Command::new(program)
+        .args(extra_args)
+        .arg(path)
+        .status();
+
+    let _ = terminal::enable_raw_mode();
+    let _ = crossterm::execute!(stdout, terminal::EnterAlternateScreen, EnableMouseCapture);
+    terminal.clear()?;
+    Ok(())
 }
 
 fn init_live_terminal() -> io::Result<ratatui::DefaultTerminal> {
@@ -361,6 +398,7 @@ fn app_accepts_compound_tokens(app: &AppState) -> bool {
         && app.editor.is_none()
         && app.save_conflict.is_none()
         && app.picker.is_none()
+        && app.list_viewer.is_none()
 }
 
 fn key_token_from_event(event: &Event) -> Option<String> {

@@ -5,7 +5,7 @@ use std::{fs, mem};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ttd::store::{TaskId, TaskStore};
-use ttd::tui::app::{AppAction, AppMode, AppState};
+use ttd::tui::app::{AppAction, AppMode, AppState, FocusArea};
 use ttd::tui::editor::{
     ConflictChoice, EditorMode, EditorSaveRequest, EditorSaveResult, EditorSaveTarget,
     EditorShortcut, SelectedTask,
@@ -206,6 +206,7 @@ fn invalid_helper_input_stays_visible_and_does_not_mutate_raw_line() {
 #[test]
 fn conflicting_save_requires_explicit_resolution_through_handle_key() {
     let mut app = AppState::new(AppMode::Main);
+    app.focus = FocusArea::TaskList;
     app.selected_task = Some(SelectedTask::new(
         TaskId {
             path: PathBuf::from("/tmp/inbox.txt"),
@@ -257,6 +258,7 @@ fn conflicting_save_requires_explicit_resolution_through_handle_key() {
 #[test]
 fn edit_modal_starts_from_selected_tasks_normalized_raw_line() {
     let mut app = AppState::new(AppMode::Main);
+    app.focus = FocusArea::TaskList;
     app.selected_task = Some(SelectedTask::new(
         TaskId {
             path: PathBuf::from("/tmp/inbox.txt"),
@@ -337,6 +339,7 @@ fn conflict_choices_reload_overwrite_or_keep_local_draft() {
     let selected = SelectedTask::new(task_id.clone(), "Call Mom due:2026-03-31");
 
     let mut cancel_app = AppState::new(AppMode::Main);
+    cancel_app.focus = FocusArea::TaskList;
     cancel_app.selected_task = Some(selected.clone());
     cancel_app.handle_key("e");
     for key in [" ", "@", "h", "o", "m", "e"] {
@@ -367,6 +370,7 @@ fn conflict_choices_reload_overwrite_or_keep_local_draft() {
     );
 
     let mut reload_app = AppState::new(AppMode::Main);
+    reload_app.focus = FocusArea::TaskList;
     reload_app.selected_task = Some(selected.clone());
     reload_app.handle_key("e");
     for key in [" ", "@", "w", "o", "r", "k"] {
@@ -401,6 +405,7 @@ fn conflict_choices_reload_overwrite_or_keep_local_draft() {
     );
 
     let mut overwrite_app = AppState::new(AppMode::Main);
+    overwrite_app.focus = FocusArea::TaskList;
     overwrite_app.selected_task = Some(selected);
     overwrite_app.handle_key("e");
     for key in [" ", "@", "e", "r", "r", "a", "n", "d", "s"] {

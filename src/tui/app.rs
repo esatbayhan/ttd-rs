@@ -101,6 +101,10 @@ pub enum AppAction {
     ReverseSort,
     PickerSelect,
     ToggleGroup,
+    OpenListViewer,
+    CloseListViewer,
+    ScrollListViewer(isize),
+    EditListExternally,
 }
 
 pub struct AppState {
@@ -115,6 +119,32 @@ pub struct AppState {
     pub save_conflict: Option<SaveConflictState>,
     pub should_quit: bool,
     pub picker: Option<PickerState>,
+    pub list_viewer: Option<ListViewerState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListViewerState {
+    pub list_name: String,
+    pub source_path: std::path::PathBuf,
+    pub content: String,
+    pub scroll_offset: usize,
+}
+
+impl ListViewerState {
+    pub fn line_count(&self) -> usize {
+        self.content.lines().count()
+    }
+
+    pub fn scroll_down(&mut self, viewport_height: usize) {
+        let max_top = self.line_count().saturating_sub(viewport_height.max(1));
+        if self.scroll_offset < max_top {
+            self.scroll_offset += 1;
+        }
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+    }
 }
 
 impl AppState {
@@ -131,6 +161,7 @@ impl AppState {
             save_conflict: None,
             should_quit: false,
             picker: None,
+            list_viewer: None,
         }
     }
 
@@ -168,6 +199,10 @@ impl AppState {
 
         if self.editor.is_some() {
             return self.handle_editor_key(key);
+        }
+
+        if self.list_viewer.is_some() {
+            return self.handle_list_viewer_key(key);
         }
 
         if self.picker.is_some() {
@@ -245,11 +280,14 @@ impl AppState {
                 self.editor = Some(EditorState::quick_entry());
                 Some(AppAction::AddTask)
             }
-            "e" => {
-                let selected = self.selected_task.as_ref()?;
-                self.editor = Some(EditorState::edit(selected));
-                Some(AppAction::EditTask)
-            }
+            "e" => match self.focus {
+                FocusArea::TaskList => {
+                    let selected = self.selected_task.as_ref()?;
+                    self.editor = Some(EditorState::edit(selected));
+                    Some(AppAction::EditTask)
+                }
+                FocusArea::Sidebar => Some(AppAction::OpenListViewer),
+            },
             "x" => Some(AppAction::ToggleDone),
             "D" => {
                 self.confirm_delete = true;
@@ -385,6 +423,19 @@ impl AppState {
                 self.picker = None;
                 Some(AppAction::Cancel)
             }
+            _ => None,
+        }
+    }
+
+    fn handle_list_viewer_key(&mut self, key: &str) -> Option<AppAction> {
+        match key {
+            "j" | "down" => Some(AppAction::ScrollListViewer(1)),
+            "k" | "up" => Some(AppAction::ScrollListViewer(-1)),
+            "esc" | "q" => {
+                self.list_viewer = None;
+                Some(AppAction::CloseListViewer)
+            }
+            "e" => Some(AppAction::EditListExternally),
             _ => None,
         }
     }

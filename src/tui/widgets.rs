@@ -38,6 +38,13 @@ fn help_bar_entries(app: &AppState) -> Vec<(&'static str, &'static str)> {
     if app.save_conflict.is_some() {
         return vec![("r", "reload"), ("o", "overwrite"), ("c", "cancel")];
     }
+    if app.list_viewer.is_some() {
+        return vec![
+            ("j/k", "scroll"),
+            ("e", "edit externally"),
+            ("esc", "close"),
+        ];
+    }
     if app.picker.is_some() {
         return vec![("j/k", "nav"), ("enter", "select"), ("esc", "cancel")];
     }
@@ -64,7 +71,7 @@ fn help_bar_entries(app: &AppState) -> Vec<(&'static str, &'static str)> {
         ("h/l", "focus"),
         ("spc", "toggle"),
         ("a", "add"),
-        ("e", "edit"),
+        ("e", "edit/view"),
         ("x", "toggle done"),
         ("D", "delete"),
         ("s", "sort"),

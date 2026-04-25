@@ -39,6 +39,7 @@ fn persisted_config_loads_main_mode() {
 
     AppConfig {
         task_dir: root.join("todo.txt.d"),
+        editor: None,
     }
     .save(&paths)
     .unwrap();
@@ -63,6 +64,7 @@ fn invalid_config_falls_back_to_welcome_mode() {
 
     AppConfig {
         task_dir: task_file,
+        editor: None,
     }
     .save(&paths)
     .unwrap();
@@ -131,7 +133,10 @@ fn persisted_path_with_trailing_newline_loads_main_mode() {
 
 #[test]
 fn malformed_multiline_config_falls_back_to_welcome_mode() {
-    let cases = ["\n\n", "/path\n\n", "/path\nextra", "/path\r\n\r\n"];
+    // Only files with no recoverable task_dir (or with a stray non-key line
+    // after the task_dir) should fall back to welcome. Trailing blank lines
+    // and `key=value` lines after the path are accepted by the new parser.
+    let cases = ["\n\n", "/path\nextra", "/path\nanother bad line"];
 
     for (index, contents) in cases.into_iter().enumerate() {
         let root = temp_path(&format!("multiline-{}", index));
@@ -198,6 +203,7 @@ fn operational_validation_error_is_returned() {
     let paths = ConfigPaths::from_root(root.clone());
     AppConfig {
         task_dir: locked_parent.join("todo.txt.d"),
+        editor: None,
     }
     .save(&paths)
     .unwrap();

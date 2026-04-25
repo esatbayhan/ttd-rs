@@ -584,6 +584,42 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
             dialog,
         );
     }
+
+    if let Some(viewer) = app.list_viewer.as_ref() {
+        render_list_viewer(frame, viewer);
+    }
+}
+
+fn render_list_viewer(frame: &mut Frame<'_>, viewer: &super::app::ListViewerState) {
+    let area = frame.area();
+    // Sized to fit a typical .list file with breathing room; clamped to the
+    // terminal so we never draw outside.
+    let modal_width = area.width.saturating_sub(8).clamp(40, 100);
+    let modal_height = area.height.saturating_sub(4).clamp(10, 30);
+    let modal = centered_rect(area, modal_width, modal_height);
+
+    let title = format!(" {} — list source ", viewer.list_name);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .title_bottom(" j/k scroll • e edit externally • esc close ");
+    let inner = block.inner(modal);
+    frame.render_widget(Clear, modal);
+    frame.render_widget(block, modal);
+
+    let highlighted = super::list_highlight::highlight_source(&viewer.content);
+    let viewport_height = inner.height as usize;
+    let total = highlighted.len();
+    let max_top = total.saturating_sub(viewport_height);
+    let top = viewer.scroll_offset.min(max_top);
+    let lines: Vec<Line> = highlighted
+        .into_iter()
+        .skip(top)
+        .take(viewport_height)
+        .map(Line::from)
+        .collect();
+
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn sidebar_label(
