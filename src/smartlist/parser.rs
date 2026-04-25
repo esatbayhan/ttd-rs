@@ -2,26 +2,54 @@ use std::path::Path;
 
 use super::types::*;
 
-fn parse_date_offset(value: &str) -> Option<i32> {
+fn is_date_literal(value: &str) -> bool {
+    value.len() == 10
+        && value
+            .as_bytes()
+            .iter()
+            .enumerate()
+            .all(|(idx, b)| match idx {
+                4 | 7 => *b == b'-',
+                _ => b.is_ascii_digit(),
+            })
+}
+
+/// Parse a `date-value` per LISTS.md grammar.
+///
+/// Accepts:
+/// - `today`
+/// - `today + N` / `today - N` (spaces optional)
+/// - `YYYY-MM-DD`
+/// - `YYYY-MM-DD + N` / `YYYY-MM-DD - N` (spaces optional)
+fn parse_date_value(value: &str) -> Option<DateValue> {
     let value = value.trim();
-    if value == "today" {
-        return Some(0);
-    }
-    // Strip "today" prefix then parse optional offset
-    let rest = value.strip_prefix("today")?;
-    let rest = rest.trim();
-    if rest.is_empty() {
-        return Some(0);
-    }
-    if let Some(rest) = rest.strip_prefix('+') {
-        let num: i32 = rest.trim().parse().ok()?;
-        Some(num)
-    } else if let Some(rest) = rest.strip_prefix('-') {
-        let num: i32 = rest.trim().parse().ok()?;
-        Some(-num)
+
+    let (anchor, rest) = if let Some(rest) = value.strip_prefix("today") {
+        (DateAnchor::Today, rest)
+    } else if value.len() >= 10 && is_date_literal(&value[..10]) {
+        (DateAnchor::Date(value[..10].to_string()), &value[10..])
     } else {
-        None
+        return None;
+    };
+
+    let rest = rest.trim_start();
+    if rest.is_empty() {
+        return Some(DateValue { anchor, offset: 0 });
     }
+
+    let (sign, num_str) = if let Some(num) = rest.strip_prefix('+') {
+        (1i32, num.trim_start())
+    } else if let Some(num) = rest.strip_prefix('-') {
+        (-1i32, num.trim_start())
+    } else {
+        return None;
+    };
+
+    let num: i32 = num_str.trim().parse().ok()?;
+    Some(DateValue {
+        anchor,
+        offset: sign * num,
+    })
 }
 
 fn parse_date_field(s: &str) -> Option<DateField> {
@@ -29,6 +57,7 @@ fn parse_date_field(s: &str) -> Option<DateField> {
         "due" => Some(DateField::Due),
         "scheduled" => Some(DateField::Scheduled),
         "starting" => Some(DateField::Starting),
+        "updated" => Some(DateField::Updated),
         "creation_date" => Some(DateField::CreationDate),
         _ => None,
     }
@@ -39,6 +68,7 @@ pub fn parse_field(s: &str) -> Option<Field> {
         "due" => Some(Field::Due),
         "scheduled" => Some(Field::Scheduled),
         "starting" => Some(Field::Starting),
+        "updated" => Some(Field::Updated),
         "creation_date" => Some(Field::CreationDate),
         "priority" => Some(Field::Priority),
         "project" => Some(Field::Project),
@@ -72,7 +102,6 @@ fn parse_compare_op(s: &str) -> Option<CompareOp> {
 fn parse_condition(line: &str) -> Option<Condition> {
     let line = line.trim();
 
-    // done / not done -- check before "no" prefix
     if line == "done" {
         return Some(Condition::DoneFilter { done: true });
     }
@@ -80,7 +109,6 @@ fn parse_condition(line: &str) -> Option<Condition> {
         return Some(Condition::DoneFilter { done: false });
     }
 
-    // existence: "has <field>" or "no <field>"
     if let Some(rest) = line.strip_prefix("has ") {
         if let Some(field) = parse_field(rest.trim()) {
             return Some(Condition::Existence {
@@ -100,8 +128,6 @@ fn parse_condition(line: &str) -> Option<Condition> {
         return None;
     }
 
-    // comparison: field op value
-    // Split into at most 3 parts: field, operator, value
     let parts: Vec<&str> = line.splitn(3, ' ').collect();
     if parts.len() < 3 {
         return None;
@@ -110,20 +136,18 @@ fn parse_condition(line: &str) -> Option<Condition> {
     let op_str = parts[1];
     let value_str = parts[2];
 
-    // date comparison
-    if let (Some(date_field), Some(comp_op), Some(offset)) = (
+    if let (Some(date_field), Some(comp_op), Some(date_value)) = (
         parse_date_field(field_str),
         parse_compare_op(op_str),
-        parse_date_offset(value_str),
+        parse_date_value(value_str),
     ) {
         return Some(Condition::DateComparison {
             field: date_field,
             op: comp_op,
-            offset,
+            value: date_value,
         });
     }
 
-    // priority comparison
     if field_str == "priority" {
         let priority_op = match op_str {
             "=" => Some(PriorityOp::Eq),
@@ -140,14 +164,10 @@ fn parse_condition(line: &str) -> Option<Condition> {
         if let (Some(pop), Some(c)) = (priority_op, first_char)
             && c.is_ascii_uppercase()
         {
-            return Some(Condition::PriorityComparison {
-                op: pop,
-                letter: c,
-            });
+            return Some(Condition::PriorityComparison { op: pop, letter: c });
         }
     }
 
-    // text comparison
     let text_op = match op_str {
         "includes" => Some(TextOp::Includes),
         "excludes" => Some(TextOp::Excludes),
@@ -165,7 +185,6 @@ fn parse_condition(line: &str) -> Option<Condition> {
 }
 
 fn parse_directive(line: &str) -> Option<(bool, Directive)> {
-    // Returns (is_sort, Directive) or None
     let line = line.trim();
     let (is_sort, rest) = if let Some(r) = line.strip_prefix("sort by ") {
         (true, r)
@@ -191,6 +210,47 @@ fn parse_directive(line: &str) -> Option<(bool, Directive)> {
     Some((is_sort, Directive { field, direction }))
 }
 
+/// Classified result of parsing a `prefill` line.
+enum PrefillLine {
+    Project(String),
+    Context(String),
+    Priority(char),
+    Due(DateValue),
+    Scheduled(DateValue),
+    Starting(DateValue),
+}
+
+/// Parse a `prefill FIELD VALUE` line.
+///
+/// Returns `None` for any malformed input — unknown field, missing value,
+/// invalid grammar for the field type. The line is then silently dropped
+/// per LISTS.md "Lenient Parsing".
+fn parse_prefill_line(line: &str) -> Option<PrefillLine> {
+    let rest = line.trim().strip_prefix("prefill ")?;
+    let (field, value) = rest.split_once(' ')?;
+    let field = field.trim();
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    match field {
+        "project" => Some(PrefillLine::Project(value.to_string())),
+        "context" => Some(PrefillLine::Context(value.to_string())),
+        "priority" => {
+            let mut chars = value.chars();
+            let first = chars.next()?;
+            if chars.next().is_some() || !first.is_ascii_uppercase() {
+                return None;
+            }
+            Some(PrefillLine::Priority(first))
+        }
+        "due" => parse_date_value(value).map(PrefillLine::Due),
+        "scheduled" => parse_date_value(value).map(PrefillLine::Scheduled),
+        "starting" => parse_date_value(value).map(PrefillLine::Starting),
+        _ => None,
+    }
+}
+
 /// Resolve template variables `{{dir}}` and `{{dir:N}}` in content.
 ///
 /// - `source_path` is the path to the `.list` file.
@@ -199,8 +259,11 @@ fn parse_directive(line: &str) -> Option<(bool, Directive)> {
 /// - `{{dir:N}}` = ancestor N levels up from immediate parent.
 ///
 /// Returns `None` if any variable would escape beyond `lists_dir`.
-fn resolve_template_variables(content: &str, source_path: &Path, lists_dir: &Path) -> Option<String> {
-    // Compute the relative path components from lists_dir to source_path's parent
+fn resolve_template_variables(
+    content: &str,
+    source_path: &Path,
+    lists_dir: &Path,
+) -> Option<String> {
     let parent = source_path.parent()?;
     let rel = parent.strip_prefix(lists_dir).ok()?;
     let components: Vec<&str> = rel
@@ -214,15 +277,12 @@ fn resolve_template_variables(content: &str, source_path: &Path, lists_dir: &Pat
         })
         .collect();
 
-    // If no template variables present, skip regex overhead
     if !content.contains("{{dir") {
         return Some(content.to_string());
     }
 
     let mut result = content.to_string();
 
-    // Process {{dir:N}} patterns (must be done before {{dir}} to avoid partial matches)
-    // Use a loop to find and replace all occurrences
     loop {
         let Some(start) = result.find("{{dir:") else {
             break;
@@ -237,16 +297,12 @@ fn resolve_template_variables(content: &str, source_path: &Path, lists_dir: &Pat
             Err(_) => return None,
         };
 
-        // components are ordered root-to-leaf, e.g. ["work", "client-a"]
-        // dir:0 = immediate parent = last component
-        // dir:1 = one level up = second-to-last component
         let index = components.len().checked_sub(1 + n)?;
         let value = components[index];
         let pattern = format!("{{{{dir:{}}}}}", n);
         result = result.replace(&pattern, value);
     }
 
-    // Process {{dir}} (equivalent to {{dir:0}})
     if result.contains("{{dir}}") {
         let value = components.last()?;
         result = result.replace("{{dir}}", value);
@@ -256,9 +312,6 @@ fn resolve_template_variables(content: &str, source_path: &Path, lists_dir: &Pat
 }
 
 /// Compute the group_path from source_path relative to lists_dir.
-///
-/// For `lists_dir/work/client-a/review.list`, returns `["work", "client-a"]`.
-/// For `lists_dir/today.list` (root level), returns `[]`.
 fn compute_group_path(source_path: &Path, lists_dir: &Path) -> Vec<String> {
     let parent = match source_path.parent() {
         Some(p) => p,
@@ -280,23 +333,18 @@ fn compute_group_path(source_path: &Path, lists_dir: &Path) -> Vec<String> {
 }
 
 pub fn parse_list(content: &str, source_path: &Path, lists_dir: &Path) -> SmartList {
-    // Normalize line endings
     let content = content.replace("\r\n", "\n");
 
-    // Default name from filename stem
     let default_name = source_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_string();
 
-    // Compute group_path
     let group_path = compute_group_path(source_path, lists_dir);
 
-    // Split into lines and find frontmatter delimiters
     let lines: Vec<&str> = content.lines().collect();
 
-    // Find first and second "---" lines
     let first_dash = lines.iter().position(|l| l.trim() == "---");
     let second_dash = first_dash.and_then(|start| {
         lines[start + 1..]
@@ -305,44 +353,39 @@ pub fn parse_list(content: &str, source_path: &Path, lists_dir: &Path) -> SmartL
             .map(|rel| start + 1 + rel)
     });
 
-    let (parse_error, name, icon, description, body_str) =
-        match (first_dash, second_dash) {
-            (Some(start), Some(end)) => {
-                let frontmatter_lines = &lines[start + 1..end];
-                let body_lines = &lines[end + 1..];
+    let (parse_error, name, icon, description, body_str) = match (first_dash, second_dash) {
+        (Some(start), Some(end)) => {
+            let frontmatter_lines = &lines[start + 1..end];
+            let body_lines = &lines[end + 1..];
 
-                let mut name: Option<String> = None;
-                let mut icon: Option<String> = None;
-                let mut description: Option<String> = None;
+            let mut name: Option<String> = None;
+            let mut icon: Option<String> = None;
+            let mut description: Option<String> = None;
 
-                for fm_line in frontmatter_lines {
-                    if let Some(colon_pos) = fm_line.find(':') {
-                        let key = fm_line[..colon_pos].trim();
-                        let value = fm_line[colon_pos + 1..].trim();
-                        match key {
-                            "name" => name = Some(value.to_string()),
-                            "icon" => icon = Some(value.to_string()),
-                            "description" => description = Some(value.to_string()),
-                            _ => {} // unknown keys ignored
-                        }
+            for fm_line in frontmatter_lines {
+                if let Some(colon_pos) = fm_line.find(':') {
+                    let key = fm_line[..colon_pos].trim();
+                    let value = fm_line[colon_pos + 1..].trim();
+                    match key {
+                        "name" => name = Some(value.to_string()),
+                        "icon" => icon = Some(value.to_string()),
+                        "description" => description = Some(value.to_string()),
+                        _ => {}
                     }
                 }
-
-                let resolved_name = name.unwrap_or_else(|| default_name.clone());
-                let body = body_lines.join("\n");
-                (None, resolved_name, icon, description, body)
             }
-            _ => {
-                // No valid frontmatter delimiters
-                let err = "missing frontmatter delimiters".to_string();
-                let body = lines.join("\n");
-                (Some(err), default_name, None, None, body)
-            }
-        };
 
-    // Resolve template variables before parsing filters.
-    // Per spec: if resolution fails (variable escapes lists_dir boundary),
-    // the list is invalid — record a parse error and return empty filters.
+            let resolved_name = name.unwrap_or_else(|| default_name.clone());
+            let body = body_lines.join("\n");
+            (None, resolved_name, icon, description, body)
+        }
+        _ => {
+            let err = "missing frontmatter delimiters".to_string();
+            let body = lines.join("\n");
+            (Some(err), default_name, None, None, body)
+        }
+    };
+
     let resolved_body = match resolve_template_variables(&body_str, source_path, lists_dir) {
         Some(body) => body,
         None => {
@@ -356,11 +399,11 @@ pub fn parse_list(content: &str, source_path: &Path, lists_dir: &Path) -> SmartL
                 blocks: Vec::new(),
                 sort_directives: Vec::new(),
                 group_directives: Vec::new(),
+                prefill: Prefill::default(),
             };
         }
     };
 
-    // Split body by "OR" lines
     let body_lines: Vec<&str> = resolved_body.lines().collect();
     let mut raw_blocks: Vec<Vec<&str>> = Vec::new();
     let mut current: Vec<&str> = Vec::new();
@@ -377,18 +420,17 @@ pub fn parse_list(content: &str, source_path: &Path, lists_dir: &Path) -> SmartL
     let mut blocks: Vec<FilterBlock> = Vec::new();
     let mut sort_directives: Vec<Directive> = Vec::new();
     let mut group_directives: Vec<Directive> = Vec::new();
+    let mut prefill = Prefill::default();
 
     for raw_block in raw_blocks {
         let mut conditions: Vec<Condition> = Vec::new();
 
         for line in raw_block {
             let trimmed = line.trim();
-            // Skip blank lines and comments
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
 
-            // Try directive first
             if trimmed.starts_with("sort by ") || trimmed.starts_with("group by ") {
                 if let Some((is_sort, directive)) = parse_directive(trimmed) {
                     if is_sort {
@@ -400,14 +442,18 @@ pub fn parse_list(content: &str, source_path: &Path, lists_dir: &Path) -> SmartL
                 continue;
             }
 
-            // Try condition
+            if trimmed.starts_with("prefill ") {
+                if let Some(p) = parse_prefill_line(trimmed) {
+                    apply_prefill(&mut prefill, p);
+                }
+                continue;
+            }
+
             if let Some(condition) = parse_condition(trimmed) {
                 conditions.push(condition);
             }
-            // Unrecognized lines silently skipped
         }
 
-        // Only add a block if it has conditions (empty blocks from trailing OR etc are skipped)
         if !conditions.is_empty() {
             blocks.push(FilterBlock { conditions });
         }
@@ -423,5 +469,33 @@ pub fn parse_list(content: &str, source_path: &Path, lists_dir: &Path) -> SmartL
         blocks,
         sort_directives,
         group_directives,
+        prefill,
+    }
+}
+
+fn apply_prefill(prefill: &mut Prefill, line: PrefillLine) {
+    match line {
+        PrefillLine::Project(v) => prefill.projects.push(v),
+        PrefillLine::Context(v) => prefill.contexts.push(v),
+        PrefillLine::Priority(c) => {
+            if prefill.priority.is_none() {
+                prefill.priority = Some(c);
+            }
+        }
+        PrefillLine::Due(v) => {
+            if prefill.due.is_none() {
+                prefill.due = Some(v);
+            }
+        }
+        PrefillLine::Scheduled(v) => {
+            if prefill.scheduled.is_none() {
+                prefill.scheduled = Some(v);
+            }
+        }
+        PrefillLine::Starting(v) => {
+            if prefill.starting.is_none() {
+                prefill.starting = Some(v);
+            }
+        }
     }
 }

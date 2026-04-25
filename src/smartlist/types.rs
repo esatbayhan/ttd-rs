@@ -5,6 +5,7 @@ pub enum DateField {
     Due,
     Scheduled,
     Starting,
+    Updated,
     CreationDate,
 }
 
@@ -20,6 +21,7 @@ pub enum Field {
     Due,
     Scheduled,
     Starting,
+    Updated,
     CreationDate,
     Priority,
     Project,
@@ -56,12 +58,29 @@ pub enum Direction {
     Desc,
 }
 
+/// A date anchor in a smart-list date value.
+///
+/// `today` is resolved to the current date at evaluation time;
+/// `Date(YYYY-MM-DD)` is a literal calendar anchor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DateAnchor {
+    Today,
+    Date(String),
+}
+
+/// A resolved date value: anchor plus signed integer offset in days.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateValue {
+    pub anchor: DateAnchor,
+    pub offset: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition {
     DateComparison {
         field: DateField,
         op: CompareOp,
-        offset: i32,
+        value: DateValue,
     },
     PriorityComparison {
         op: PriorityOp,
@@ -92,6 +111,33 @@ pub struct Directive {
     pub direction: Direction,
 }
 
+/// Aggregated prefill declarations from a smart list.
+///
+/// Project / context fields accumulate in declaration order; scalar fields
+/// keep the first valid declaration (`first wins`). All values are already
+/// validated against the spec grammar — invalid lines are dropped during
+/// parsing and never reach this struct.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Prefill {
+    pub projects: Vec<String>,
+    pub contexts: Vec<String>,
+    pub priority: Option<char>,
+    pub due: Option<DateValue>,
+    pub scheduled: Option<DateValue>,
+    pub starting: Option<DateValue>,
+}
+
+impl Prefill {
+    pub fn is_empty(&self) -> bool {
+        self.projects.is_empty()
+            && self.contexts.is_empty()
+            && self.priority.is_none()
+            && self.due.is_none()
+            && self.scheduled.is_none()
+            && self.starting.is_none()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SmartList {
     pub name: String,
@@ -103,4 +149,5 @@ pub struct SmartList {
     pub blocks: Vec<FilterBlock>,
     pub sort_directives: Vec<Directive>,
     pub group_directives: Vec<Directive>,
+    pub prefill: Prefill,
 }

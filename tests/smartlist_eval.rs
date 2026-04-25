@@ -19,7 +19,11 @@ fn stored(raw: &str) -> StoredTask {
 
 fn make_list(body: &str) -> ttd::smartlist::SmartList {
     let content = format!("---\nname: Test\n---\n{}", body);
-    parse_list(&content, &PathBuf::from("lists.d/test.list"), std::path::Path::new("lists.d"))
+    parse_list(
+        &content,
+        &PathBuf::from("lists.d/test.list"),
+        std::path::Path::new("lists.d"),
+    )
 }
 
 // ── Evaluate tests ────────────────────────────────────────────────────────────
@@ -28,16 +32,14 @@ fn make_list(body: &str) -> ttd::smartlist::SmartList {
 fn today_list_matches_due_or_scheduled_today() {
     // Two blocks OR'd: (due = today) OR (scheduled = today)
     // Sort by priority asc
-    let list = make_list(
-        "due = today\nsort by priority asc\nOR\nscheduled = today\n",
-    );
+    let list = make_list("due = today\nsort by priority asc\nOR\nscheduled = today\n");
 
     let today = "2026-04-03";
     let tasks = vec![
         stored("(A) Task A due:2026-04-03"),
         stored("(B) Task B scheduled:2026-04-03"),
-        stored("(C) Task C due:2026-04-10"),   // not today
-        stored("Task D"),                       // no dates
+        stored("(C) Task C due:2026-04-10"), // not today
+        stored("Task D"),                    // no dates
     ];
 
     let result = evaluate(&list, &tasks, today);
@@ -85,10 +87,7 @@ fn priority_above_filters_correctly() {
 
     let result = evaluate(&list, &tasks, today);
     assert_eq!(result.len(), 2);
-    let priorities: Vec<char> = result
-        .iter()
-        .filter_map(|st| st.task.priority)
-        .collect();
+    let priorities: Vec<char> = result.iter().filter_map(|st| st.task.priority).collect();
     assert!(priorities.contains(&'A'));
     assert!(priorities.contains(&'B'));
 }
@@ -114,10 +113,7 @@ fn done_filter_includes_completed_tasks() {
     let list = make_list("done\n");
 
     let today = "2026-04-03";
-    let tasks = vec![
-        stored("x 2026-04-01 Completed task"),
-        stored("Open task"),
-    ];
+    let tasks = vec![stored("x 2026-04-01 Completed task"), stored("Open task")];
 
     let result = evaluate(&list, &tasks, today);
     assert_eq!(result.len(), 1);
@@ -130,10 +126,7 @@ fn not_done_implied_when_no_done_filter_present() {
     let list = make_list("has description\n");
 
     let today = "2026-04-03";
-    let tasks = vec![
-        stored("x 2026-04-01 Completed task"),
-        stored("Open task"),
-    ];
+    let tasks = vec![stored("x 2026-04-01 Completed task"), stored("Open task")];
 
     let result = evaluate(&list, &tasks, today);
     assert_eq!(result.len(), 1);
@@ -178,9 +171,9 @@ fn date_offset_arithmetic_works() {
 
     let today = "2026-04-03";
     let tasks = vec![
-        stored("Task soon due:2026-04-10"),   // exactly +7 days → included
-        stored("Task later due:2026-04-11"),  // +8 days → excluded
-        stored("Task today due:2026-04-03"),  // today → included
+        stored("Task soon due:2026-04-10"),  // exactly +7 days → included
+        stored("Task later due:2026-04-11"), // +8 days → excluded
+        stored("Task today due:2026-04-03"), // today → included
     ];
 
     let result = evaluate(&list, &tasks, today);
@@ -191,6 +184,45 @@ fn date_offset_arithmetic_works() {
         .collect();
     assert!(descriptions.iter().any(|d| d.contains("Task soon")));
     assert!(descriptions.iter().any(|d| d.contains("Task today")));
+}
+
+#[test]
+fn absolute_date_anchor_with_offset() {
+    // due <= 2026-12-31 - 3 → tasks due on or before Dec 28 2026
+    let list = make_list("due <= 2026-12-31 - 3\n");
+
+    let today = "2026-04-03";
+    let tasks = vec![
+        stored("Task A due:2026-12-28"), // boundary → included
+        stored("Task B due:2026-12-29"), // after boundary → excluded
+        stored("Task C due:2026-06-01"), // long before → included
+    ];
+
+    let result = evaluate(&list, &tasks, today);
+    assert_eq!(result.len(), 2);
+    let descriptions: Vec<&str> = result
+        .iter()
+        .map(|st| st.task.description.as_str())
+        .collect();
+    assert!(descriptions.iter().any(|d| d.contains("Task A")));
+    assert!(descriptions.iter().any(|d| d.contains("Task C")));
+}
+
+#[test]
+fn updated_field_filter_matches_review_tag() {
+    // Stale tasks: not reviewed in the last 30 days
+    let list = make_list("updated < today - 30\n");
+
+    let today = "2026-04-03";
+    let tasks = vec![
+        stored("Task A updated:2026-01-01"), // 92 days ago → stale
+        stored("Task B updated:2026-03-25"), // 9 days ago → fresh
+        stored("Task C"),                    // no updated → does not match
+    ];
+
+    let result = evaluate(&list, &tasks, today);
+    assert_eq!(result.len(), 1);
+    assert!(result[0].task.description.contains("Task A"));
 }
 
 // ── Group tests ───────────────────────────────────────────────────────────────
@@ -208,8 +240,14 @@ fn group_by_priority_creates_labeled_groups() {
     let groups = group(&list, &tasks);
     // Should have two groups: A and B
     assert_eq!(groups.len(), 2);
-    let a_group = groups.iter().find(|g| g.label == "Priority: A").expect("A group");
-    let b_group = groups.iter().find(|g| g.label == "Priority: B").expect("B group");
+    let a_group = groups
+        .iter()
+        .find(|g| g.label == "Priority: A")
+        .expect("A group");
+    let b_group = groups
+        .iter()
+        .find(|g| g.label == "Priority: B")
+        .expect("B group");
     assert_eq!(a_group.tasks.len(), 2);
     assert_eq!(b_group.tasks.len(), 1);
 }

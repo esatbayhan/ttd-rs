@@ -146,6 +146,26 @@ fn parses_scheduled_fixture() {
 }
 
 #[test]
+fn parses_updated_fixture() {
+    let raw = read_fixture_line("spec/examples/valid/tag-updated.txt");
+    let task = parse_task_line(&raw);
+
+    assert_eq!(task.priority, Some('B'));
+    assert_eq!(
+        task.tags.get("updated").map(String::as_str),
+        Some("2024-03-20")
+    );
+    assert_eq!(task.tags.get("due").map(String::as_str), Some("2024-03-31"));
+}
+
+#[test]
+fn rejects_non_date_updated_value() {
+    let task = parse_task_line("Review goals updated:next-week");
+    assert_eq!(task.tags.get("updated"), None);
+    assert!(task.description.contains("updated:next-week"));
+}
+
+#[test]
 fn parses_starting_fixture() {
     let raw = read_fixture_line("spec/examples/valid/tag-starting.txt");
     let task = parse_task_line(&raw);

@@ -1,6 +1,7 @@
 use std::io;
 
 use crate::parser::{is_date, parse_task_line};
+use crate::smartlist::{Prefill, resolve_date_value};
 use crate::store::{EditSaveOutcome, TaskId, TaskStore};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +94,54 @@ impl EditorState {
     pub fn set_suffix(&mut self, suffix: &str) {
         self.raw_line = format!(" {suffix}");
         self.cursor_pos = 0;
+        self.refresh_helpers_from_raw();
+    }
+
+    /// Seed a quick-entry editor with prefill defaults from a smart list.
+    ///
+    /// Builds `[priority] <description-gap> +project @context tag:VALUE ...` and
+    /// places the cursor in the description gap so the user types the description
+    /// between the priority prefix (if any) and the trailing tokens.
+    pub fn apply_prefill(&mut self, prefill: &Prefill, today: &str) {
+        if prefill.is_empty() {
+            return;
+        }
+
+        let mut prefix = String::new();
+        if let Some(p) = prefill.priority {
+            prefix.push('(');
+            prefix.push(p);
+            prefix.push_str(") ");
+        }
+
+        let mut tokens: Vec<String> = Vec::new();
+        for project in &prefill.projects {
+            tokens.push(format!("+{project}"));
+        }
+        for context in &prefill.contexts {
+            tokens.push(format!("@{context}"));
+        }
+        if let Some(due) = &prefill.due {
+            tokens.push(format!("due:{}", resolve_date_value(due, today)));
+        }
+        if let Some(scheduled) = &prefill.scheduled {
+            tokens.push(format!(
+                "scheduled:{}",
+                resolve_date_value(scheduled, today)
+            ));
+        }
+        if let Some(starting) = &prefill.starting {
+            tokens.push(format!("starting:{}", resolve_date_value(starting, today)));
+        }
+
+        let suffix = if tokens.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", tokens.join(" "))
+        };
+
+        self.cursor_pos = prefix.chars().count();
+        self.raw_line = format!("{prefix}{suffix}");
         self.refresh_helpers_from_raw();
     }
 

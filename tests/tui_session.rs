@@ -54,20 +54,13 @@ fn session_loads_snapshot_and_exposes_smart_filters() {
 
     let session = TuiSession::open(root, "2026-03-30").unwrap();
 
-    assert_eq!(
-        session.active_sidebar_item(),
-        SidebarItem::SmartList(0)
-    );
+    assert_eq!(session.active_sidebar_item(), SidebarItem::SmartList(0));
     assert_eq!(session.visible_tasks().len(), 1);
     assert_eq!(
         session.visible_tasks()[0].task.description,
         "Call Mom +Family @phone"
     );
-    assert!(
-        session
-            .sidebar_items()
-            .contains(&SidebarItem::SmartList(1))
-    );
+    assert!(session.sidebar_items().contains(&SidebarItem::SmartList(1)));
 }
 
 #[test]
@@ -420,7 +413,6 @@ fn x_restores_done_task_back_to_open() {
     assert!(!root.join("done.txt.d/a.txt").exists());
 }
 
-
 #[test]
 fn toggling_done_preserves_selection_in_project_view() {
     let root = temp_path("done-project-selection");
@@ -606,10 +598,7 @@ fn refresh_recovers_when_active_project_filter_disappears() {
     fs::remove_file(root.join("b.txt")).unwrap();
     session.dispatch_key("R").unwrap();
 
-    assert_eq!(
-        session.active_sidebar_item(),
-        SidebarItem::SmartList(0)
-    );
+    assert_eq!(session.active_sidebar_item(), SidebarItem::SmartList(0));
     assert!(
         !session
             .sidebar_items()
@@ -669,10 +658,7 @@ fn refresh_recovers_when_active_context_filter_disappears() {
     fs::remove_file(root.join("b.txt")).unwrap();
     session.dispatch_key("R").unwrap();
 
-    assert_eq!(
-        session.active_sidebar_item(),
-        SidebarItem::SmartList(0)
-    );
+    assert_eq!(session.active_sidebar_item(), SidebarItem::SmartList(0));
     assert!(
         !session
             .sidebar_items()
@@ -797,7 +783,11 @@ fn view_overrides_sort_replaces_smart_list_sort() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(B) Beta due:2026-04-01\n").unwrap();
     fs::write(root.join("b.txt"), "(A) Alpha due:2026-04-05\n").unwrap();
 
@@ -817,7 +807,11 @@ fn reverse_sort_flips_smart_list_default_order() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(A) Alpha\n").unwrap();
     fs::write(root.join("b.txt"), "(B) Beta\n").unwrap();
 
@@ -833,7 +827,11 @@ fn view_overrides_group_replaces_smart_list_group() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(A) Alpha\n").unwrap();
     fs::write(root.join("b.txt"), "(B) Beta\n").unwrap();
 
@@ -855,8 +853,16 @@ fn view_overrides_cleared_on_sidebar_item_change() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n").unwrap();
-    fs::write(lists_dir.join("done.list"), "---\nname: Done\norder: 2\n---\ndone\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n",
+    )
+    .unwrap();
+    fs::write(
+        lists_dir.join("done.list"),
+        "---\nname: Done\norder: 2\n---\ndone\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(A) Alpha\n").unwrap();
 
     let mut session = TuiSession::open(root, "2026-03-30").unwrap();
@@ -935,7 +941,11 @@ fn sort_picker_applies_selected_field_as_override() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(B) Beta due:2026-04-01\n").unwrap();
     fs::write(root.join("b.txt"), "(A) Alpha due:2026-04-05\n").unwrap();
 
@@ -957,7 +967,11 @@ fn r_reverses_current_sort_order() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(A) Alpha\n").unwrap();
     fs::write(root.join("b.txt"), "(B) Beta\n").unwrap();
 
@@ -975,7 +989,11 @@ fn shift_s_deactivates_sort_override() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
-    fs::write(lists_dir.join("all.list"), "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n").unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\norder: 1\n---\nnot done\n\nsort by priority asc\n",
+    )
+    .unwrap();
     fs::write(root.join("a.txt"), "(A) Alpha\n").unwrap();
     fs::write(root.join("b.txt"), "(B) Beta\n").unwrap();
 
@@ -1041,7 +1059,12 @@ fn full_override_workflow_sort_group_reverse_deactivate() {
 
     // Reverse
     session.dispatch_key("r").unwrap();
-    assert!(session.visible_tasks()[0].task.description.contains("Alpha due:2026-04-05"));
+    assert!(
+        session.visible_tasks()[0]
+            .task
+            .description
+            .contains("Alpha due:2026-04-05")
+    );
 
     // Open group picker, select Priority (index 0)
     session.dispatch_key("o").unwrap();
@@ -1093,4 +1116,49 @@ fn reversing_sort_reorders_groups_when_same_field() {
         session.visible_groups()[0].label.contains("B"),
         "reversing sort should reorder groups when same field"
     );
+}
+
+#[test]
+fn add_task_seeds_editor_with_prefill_from_active_smart_list() {
+    let root = temp_path("prefill-add");
+    fs::create_dir_all(root.join("done.txt.d")).unwrap();
+    let lists_dir = root.join("lists.d");
+    fs::create_dir_all(&lists_dir).unwrap();
+    fs::write(
+        lists_dir.join("1 inbox.list"),
+        "---\nname: Inbox\n---\nnot done\n\n\
+         prefill priority A\n\
+         prefill project work\n\
+         prefill context office\n\
+         prefill due today+7\n",
+    )
+    .unwrap();
+
+    let mut session = TuiSession::open(root, "2026-03-30").unwrap();
+    assert_eq!(session.active_sidebar_item(), SidebarItem::SmartList(0));
+
+    session.dispatch_key("a").unwrap();
+
+    let editor = session.app().editor.as_ref().expect("editor opened");
+    assert_eq!(editor.raw_line, "(A)  +work @office due:2026-04-06");
+    assert_eq!(editor.cursor_pos, 4);
+}
+
+#[test]
+fn add_task_without_prefill_leaves_editor_blank() {
+    let root = temp_path("prefill-empty");
+    fs::create_dir_all(root.join("done.txt.d")).unwrap();
+    let lists_dir = root.join("lists.d");
+    fs::create_dir_all(&lists_dir).unwrap();
+    fs::write(
+        lists_dir.join("1 inbox.list"),
+        "---\nname: Inbox\n---\nnot done\n",
+    )
+    .unwrap();
+
+    let mut session = TuiSession::open(root, "2026-03-30").unwrap();
+    session.dispatch_key("a").unwrap();
+
+    let editor = session.app().editor.as_ref().expect("editor opened");
+    assert!(editor.raw_line.is_empty());
 }

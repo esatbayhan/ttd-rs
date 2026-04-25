@@ -1,8 +1,15 @@
 use std::path::Path;
 use ttd::smartlist::{
-    parse_list, CompareOp, Condition, DateField, Direction, Directive, Field,
-    PriorityOp, TextOp, TextField,
+    CompareOp, Condition, DateAnchor, DateField, DateValue, Direction, Directive, Field,
+    PriorityOp, TextField, TextOp, parse_list,
 };
+
+fn today_offset(offset: i32) -> DateValue {
+    DateValue {
+        anchor: DateAnchor::Today,
+        offset,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -102,7 +109,7 @@ fn parses_date_comparison_with_today() {
         Condition::DateComparison {
             field: DateField::Due,
             op: CompareOp::Lte,
-            offset: 0,
+            value: today_offset(0),
         }
     );
 }
@@ -117,7 +124,7 @@ fn parses_date_comparison_with_offset() {
         Condition::DateComparison {
             field: DateField::Due,
             op: CompareOp::Lte,
-            offset: 7,
+            value: today_offset(7),
         }
     );
 }
@@ -132,7 +139,7 @@ fn parses_date_comparison_with_negative_offset() {
         Condition::DateComparison {
             field: DateField::Due,
             op: CompareOp::Lt,
-            offset: -14,
+            value: today_offset(-14),
         }
     );
 }
@@ -147,7 +154,7 @@ fn parses_date_offset_without_spaces() {
         Condition::DateComparison {
             field: DateField::Due,
             op: CompareOp::Lte,
-            offset: 7,
+            value: today_offset(7),
         }
     );
 }
@@ -241,7 +248,7 @@ fn parses_or_blocks() {
         Condition::DateComparison {
             field: DateField::Due,
             op: CompareOp::Lte,
-            offset: 0,
+            value: today_offset(0),
         }
     );
     assert_eq!(
@@ -249,7 +256,7 @@ fn parses_or_blocks() {
         Condition::DateComparison {
             field: DateField::Scheduled,
             op: CompareOp::Lte,
-            offset: 0,
+            value: today_offset(0),
         }
     );
 }
@@ -361,7 +368,7 @@ fn today_negative_offset_without_spaces() {
         Condition::DateComparison {
             field: DateField::Due,
             op: CompareOp::Lte,
-            offset: -7,
+            value: today_offset(-7),
         }
     );
 }
@@ -434,7 +441,10 @@ fn dir_0_is_same_as_dir() {
     let list_dir0 = parse_list(&content_dir0, path("lists.d/sub/b.list"), lists_dir());
     assert!(list_dir.parse_error.is_none());
     assert!(list_dir0.parse_error.is_none());
-    assert_eq!(list_dir.blocks[0].conditions[0], list_dir0.blocks[0].conditions[0]);
+    assert_eq!(
+        list_dir.blocks[0].conditions[0],
+        list_dir0.blocks[0].conditions[0]
+    );
 }
 
 #[test]
@@ -465,4 +475,162 @@ fn no_template_variables_works_normally() {
             text: "Work".to_string(),
         }
     );
+}
+
+// ---------------------------------------------------------------------------
+// `updated` field (spec v2.1.0)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parses_updated_date_comparison() {
+    let content = make_content("name: Stale\n", "updated < today - 30\n");
+    let list = parse_list(&content, path("lists.d/stale.list"), lists_dir());
+    assert_eq!(list.blocks.len(), 1);
+    assert_eq!(
+        list.blocks[0].conditions[0],
+        Condition::DateComparison {
+            field: DateField::Updated,
+            op: CompareOp::Lt,
+            value: today_offset(-30),
+        }
+    );
+}
+
+#[test]
+fn parses_updated_existence() {
+    let content = make_content("name: Reviewed\n", "has updated\n");
+    let list = parse_list(&content, path("lists.d/reviewed.list"), lists_dir());
+    assert_eq!(list.blocks.len(), 1);
+    assert_eq!(
+        list.blocks[0].conditions[0],
+        Condition::Existence {
+            field: Field::Updated,
+            present: true,
+        }
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Date-anchor literal (spec v2.2.0)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parses_absolute_date_anchor() {
+    let content = make_content("name: Year End\n", "due <= 2026-12-31\n");
+    let list = parse_list(&content, path("lists.d/year-end.list"), lists_dir());
+    assert_eq!(list.blocks.len(), 1);
+    assert_eq!(
+        list.blocks[0].conditions[0],
+        Condition::DateComparison {
+            field: DateField::Due,
+            op: CompareOp::Lte,
+            value: DateValue {
+                anchor: DateAnchor::Date("2026-12-31".to_string()),
+                offset: 0,
+            },
+        }
+    );
+}
+
+#[test]
+fn parses_absolute_date_with_offset() {
+    let content = make_content("name: Soon\n", "due <= 2026-06-01-3\n");
+    let list = parse_list(&content, path("lists.d/soon.list"), lists_dir());
+    assert_eq!(list.blocks.len(), 1);
+    assert_eq!(
+        list.blocks[0].conditions[0],
+        Condition::DateComparison {
+            field: DateField::Due,
+            op: CompareOp::Lte,
+            value: DateValue {
+                anchor: DateAnchor::Date("2026-06-01".to_string()),
+                offset: -3,
+            },
+        }
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Prefill (spec v2.2.0)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn collects_prefill_project_and_context() {
+    let body = "not done\n\nprefill project work\nprefill project urgent\nprefill context office\n";
+    let content = make_content("name: Inbox\n", body);
+    let list = parse_list(&content, path("lists.d/inbox.list"), lists_dir());
+    assert_eq!(list.prefill.projects, vec!["work", "urgent"]);
+    assert_eq!(list.prefill.contexts, vec!["office"]);
+}
+
+#[test]
+fn scalar_prefill_first_wins() {
+    let body = "not done\n\nprefill due today+1\nprefill due today+7\n";
+    let content = make_content("name: Dup\n", body);
+    let list = parse_list(&content, path("lists.d/dup.list"), lists_dir());
+    assert_eq!(list.prefill.due, Some(today_offset(1)));
+}
+
+#[test]
+fn invalid_scalar_prefill_does_not_consume_slot() {
+    let body = "not done\n\nprefill due next-week\nprefill due today+3\n";
+    let content = make_content("name: Bad\n", body);
+    let list = parse_list(&content, path("lists.d/bad.list"), lists_dir());
+    assert_eq!(list.prefill.due, Some(today_offset(3)));
+}
+
+#[test]
+fn unknown_prefill_field_is_ignored() {
+    let body = "not done\n\nprefill foo bar\nprefill project work\n";
+    let content = make_content("name: Unknown\n", body);
+    let list = parse_list(&content, path("lists.d/unknown.list"), lists_dir());
+    assert_eq!(list.prefill.projects, vec!["work"]);
+}
+
+#[test]
+fn prefill_priority_is_uppercase_letter() {
+    let body = "not done\n\nprefill priority A\nprefill priority Z\n";
+    let content = make_content("name: Prio\n", body);
+    let list = parse_list(&content, path("lists.d/prio.list"), lists_dir());
+    assert_eq!(list.prefill.priority, Some('A'));
+}
+
+#[test]
+fn prefill_priority_lowercase_is_rejected() {
+    let body = "not done\n\nprefill priority a\nprefill priority B\n";
+    let content = make_content("name: Prio\n", body);
+    let list = parse_list(&content, path("lists.d/prio.list"), lists_dir());
+    assert_eq!(list.prefill.priority, Some('B'));
+}
+
+#[test]
+fn prefill_resolves_dir_template_variable() {
+    let body = "not done\n\nprefill project {{dir}}\nprefill context bug\n";
+    let content = make_content("name: New Bug\n", body);
+    let list = parse_list(&content, path("lists.d/ttd/new-bug.list"), lists_dir());
+    assert_eq!(list.prefill.projects, vec!["ttd"]);
+    assert_eq!(list.prefill.contexts, vec!["bug"]);
+}
+
+#[test]
+fn prefill_absolute_date_with_offset() {
+    let body = "not done\n\nprefill due 2026-06-01-3\n";
+    let content = make_content("name: Year End\n", body);
+    let list = parse_list(&content, path("lists.d/year-end.list"), lists_dir());
+    assert_eq!(
+        list.prefill.due,
+        Some(DateValue {
+            anchor: DateAnchor::Date("2026-06-01".to_string()),
+            offset: -3,
+        })
+    );
+}
+
+#[test]
+fn prefill_does_not_affect_filter_matching() {
+    let body = "not done\n\nprefill project work\n";
+    let content = make_content("name: Active\n", body);
+    let list = parse_list(&content, path("lists.d/active.list"), lists_dir());
+    assert_eq!(list.blocks.len(), 1);
+    assert_eq!(list.blocks[0].conditions.len(), 1);
 }

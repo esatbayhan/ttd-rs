@@ -40,8 +40,18 @@ fn get_date_field_value<'a>(task: &'a Task, field: &DateField) -> Option<&'a str
         DateField::Due => task.tags.get("due").map(|s| s.as_str()),
         DateField::Scheduled => task.tags.get("scheduled").map(|s| s.as_str()),
         DateField::Starting => task.tags.get("starting").map(|s| s.as_str()),
+        DateField::Updated => task.tags.get("updated").map(|s| s.as_str()),
         DateField::CreationDate => task.creation_date.as_deref(),
     }
+}
+
+/// Resolve a smart-list `DateValue` to a concrete `YYYY-MM-DD` string given today's date.
+pub fn resolve_date_value(value: &DateValue, today: &str) -> String {
+    let anchor = match &value.anchor {
+        DateAnchor::Today => today,
+        DateAnchor::Date(d) => d.as_str(),
+    };
+    add_days_to_date(anchor, value.offset)
 }
 
 fn eval_condition(cond: &Condition, task: &Task, today: &str) -> bool {
@@ -53,6 +63,7 @@ fn eval_condition(cond: &Condition, task: &Task, today: &str) -> bool {
                 Field::Due => task.tags.contains_key("due"),
                 Field::Scheduled => task.tags.contains_key("scheduled"),
                 Field::Starting => task.tags.contains_key("starting"),
+                Field::Updated => task.tags.contains_key("updated"),
                 Field::CreationDate => task.creation_date.is_some(),
                 Field::Priority => task.priority.is_some(),
                 Field::Project => !task.projects.is_empty(),
@@ -63,12 +74,12 @@ fn eval_condition(cond: &Condition, task: &Task, today: &str) -> bool {
             has == *present
         }
 
-        Condition::DateComparison { field, op, offset } => {
+        Condition::DateComparison { field, op, value } => {
             let task_date = match get_date_field_value(task, field) {
                 Some(d) => d,
                 None => return false,
             };
-            let target = add_days_to_date(today, *offset);
+            let target = resolve_date_value(value, today);
             match op {
                 CompareOp::Eq => task_date == target,
                 CompareOp::Lt => task_date < target.as_str(),
@@ -129,6 +140,7 @@ fn task_sort_key(task: &Task, field: &Field) -> Option<String> {
         Field::Due => task.tags.get("due").cloned(),
         Field::Scheduled => task.tags.get("scheduled").cloned(),
         Field::Starting => task.tags.get("starting").cloned(),
+        Field::Updated => task.tags.get("updated").cloned(),
         Field::CreationDate => task.creation_date.clone(),
         Field::Priority => task.priority.map(|c| c.to_string()),
         Field::Project => task.projects.first().cloned(),
@@ -311,6 +323,7 @@ fn task_group_key(task: &Task, field: &Field) -> Option<String> {
         Field::Due => task.tags.get("due").cloned(),
         Field::Scheduled => task.tags.get("scheduled").cloned(),
         Field::Starting => task.tags.get("starting").cloned(),
+        Field::Updated => task.tags.get("updated").cloned(),
         Field::CreationDate => task.creation_date.clone(),
         Field::Priority => task.priority.map(|c| c.to_string()),
         Field::Project => task.projects.first().cloned(),
@@ -333,6 +346,7 @@ pub fn field_display_name(field: &Field) -> &'static str {
         Field::Due => "due",
         Field::Scheduled => "scheduled",
         Field::Starting => "starting",
+        Field::Updated => "updated",
         Field::CreationDate => "creation date",
         Field::Priority => "priority",
         Field::Project => "project",

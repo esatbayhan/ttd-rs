@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::parser::parse_task_line;
 use crate::query::sort_tasks;
 use crate::refresh::SnapshotIndex;
-use crate::smartlist::{Directive, Direction};
+use crate::smartlist::{Direction, Directive};
 use crate::store::{Snapshot, StoredTask, TaskId, TaskStore};
 use crate::task::Task;
 use crate::tui::app::{AppAction, AppMode, AppState, FocusArea};
@@ -21,7 +21,11 @@ pub struct ViewOverrides {
 
 impl ViewOverrides {
     pub fn new() -> Self {
-        Self { sort: None, group: None, reversed: false }
+        Self {
+            sort: None,
+            group: None,
+            reversed: false,
+        }
     }
     pub fn clear(&mut self) {
         self.sort = None;
@@ -358,10 +362,8 @@ impl TuiSession {
                 }
                 for (i, stored) in group.tasks.iter().enumerate() {
                     let task_start = current_line;
-                    let line_count = visual_line_count_for_task(
-                        &stored.task,
-                        task_pane_inner_width,
-                    );
+                    let line_count =
+                        visual_line_count_for_task(&stored.task, task_pane_inner_width);
                     current_line += line_count;
                     if absolute_row >= task_start && absolute_row < current_line {
                         return Some(task_flat_index);
@@ -375,10 +377,7 @@ impl TuiSession {
         } else {
             for (i, stored) in self.visible_tasks.iter().enumerate() {
                 let task_start = current_line;
-                let line_count = visual_line_count_for_task(
-                    &stored.task,
-                    task_pane_inner_width,
-                );
+                let line_count = visual_line_count_for_task(&stored.task, task_pane_inner_width);
                 current_line += line_count;
                 if absolute_row >= task_start && absolute_row < current_line {
                     return Some(i);
@@ -392,7 +391,12 @@ impl TuiSession {
         None
     }
 
-    pub fn apply_task_scroll(&mut self, delta: isize, visual_line_count: usize, pane_height: usize) {
+    pub fn apply_task_scroll(
+        &mut self,
+        delta: isize,
+        visual_line_count: usize,
+        pane_height: usize,
+    ) {
         let max_offset = visual_line_count.saturating_sub(pane_height);
         let current = self.task_scroll_override.unwrap_or(0) as isize;
         let new_offset = (current + delta).clamp(0, max_offset as isize) as u16;
@@ -522,7 +526,8 @@ impl TuiSession {
     }
 
     fn rebuild(&mut self) {
-        self.sidebar_items = build_sidebar_items(&self.smart_lists, &self.snapshot, &self.collapsed_groups);
+        self.sidebar_items =
+            build_sidebar_items(&self.smart_lists, &self.snapshot, &self.collapsed_groups);
         if !self.sidebar_items.contains(&self.active_sidebar_item) {
             self.active_sidebar_item = self
                 .sidebar_items
@@ -562,12 +567,16 @@ impl TuiSession {
         }
         self.visible_tasks = tasks;
         let group_directives = self.effective_group_directives();
-        self.visible_groups = crate::smartlist::group_by_directives(&group_directives, &self.visible_tasks);
+        self.visible_groups =
+            crate::smartlist::group_by_directives(&group_directives, &self.visible_tasks);
         // When a sort override is active, re-sort tasks within each group and
         // reorder the groups themselves so that sorting is visible even when
         // grouping is enabled.
         let has_groups = self.visible_groups.len() > 1
-            || self.visible_groups.first().is_some_and(|g| !g.label.is_empty());
+            || self
+                .visible_groups
+                .first()
+                .is_some_and(|g| !g.label.is_empty());
         if has_groups && !sort_directives.is_empty() {
             for group in &mut self.visible_groups {
                 crate::smartlist::sort_by_directives(&mut group.tasks, &sort_directives);
@@ -684,15 +693,25 @@ impl TuiSession {
                 }
             }
             AppAction::AddTask => {
+                let prefill = match &self.active_sidebar_item {
+                    SidebarItem::SmartList(_) => self
+                        .smart_list_for_active()
+                        .map(|list| list.prefill.clone()),
+                    _ => None,
+                };
                 let suffix = match &self.active_sidebar_item {
                     SidebarItem::Project(value) | SidebarItem::Context(value) => {
                         Some(value.clone())
                     }
                     _ => None,
                 };
-                if let Some(suffix) = suffix {
-                    if let Some(editor) = self.app.editor.as_mut() {
-                        editor.set_suffix(&suffix);
+                if let Some(editor) = self.app.editor.as_mut() {
+                    if let Some(prefill) = prefill.as_ref()
+                        && !prefill.is_empty()
+                    {
+                        editor.apply_prefill(prefill, &self.today);
+                    } else if let Some(suffix) = suffix.as_ref() {
+                        editor.set_suffix(suffix);
                     }
                 }
             }
@@ -1019,7 +1038,8 @@ fn build_sidebar_items(
 
         for prefix in &all_prefixes {
             // Check if any ancestor is collapsed — if so, skip this prefix entirely
-            let ancestor_collapsed = (1..prefix.len()).any(|d| collapsed.contains(&prefix[..d].to_vec()));
+            let ancestor_collapsed =
+                (1..prefix.len()).any(|d| collapsed.contains(&prefix[..d].to_vec()));
             if ancestor_collapsed {
                 continue;
             }

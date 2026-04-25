@@ -175,7 +175,7 @@ fn split_tag_token(token: &str) -> Option<(&str, &str)> {
 }
 
 fn tag_value_is_valid(key: &str, value: &str) -> bool {
-    if matches!(key, "due" | "scheduled" | "starting") {
+    if matches!(key, "due" | "scheduled" | "starting" | "updated") {
         return is_date(value);
     }
 
