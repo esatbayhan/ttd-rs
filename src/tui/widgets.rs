@@ -39,11 +39,7 @@ fn help_bar_entries(app: &AppState) -> Vec<(&'static str, &'static str)> {
         return vec![("r", "reload"), ("o", "overwrite"), ("c", "cancel")];
     }
     if app.picker.is_some() {
-        return vec![
-            ("j/k", "nav"),
-            ("enter", "select"),
-            ("esc", "cancel"),
-        ];
+        return vec![("j/k", "nav"), ("enter", "select"), ("esc", "cancel")];
     }
     if app.editor.as_ref().is_some_and(|e| e.shortcut.is_some()) {
         return vec![("enter", "apply"), ("esc", "cancel")];

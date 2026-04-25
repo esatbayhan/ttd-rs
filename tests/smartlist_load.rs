@@ -14,21 +14,9 @@ fn loads_and_sorts_by_filename_alphabetically() {
     let dir = temp_path("sort_alpha");
     fs::create_dir_all(&dir).unwrap();
 
-    fs::write(
-        dir.join("3 Upcoming.list"),
-        "---\nname: Upcoming\n---\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join("1 Today.list"),
-        "---\nname: Today\n---\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join("2 Inbox.list"),
-        "---\nname: Inbox\n---\n",
-    )
-    .unwrap();
+    fs::write(dir.join("3 Upcoming.list"), "---\nname: Upcoming\n---\n").unwrap();
+    fs::write(dir.join("1 Today.list"), "---\nname: Today\n---\n").unwrap();
+    fs::write(dir.join("2 Inbox.list"), "---\nname: Inbox\n---\n").unwrap();
 
     let lists = load_all(&dir);
     fs::remove_dir_all(&dir).unwrap();
@@ -44,16 +32,8 @@ fn legacy_order_key_is_ignored_in_sorting() {
     let dir = temp_path("legacy_order");
     fs::create_dir_all(&dir).unwrap();
 
-    fs::write(
-        dir.join("alpha.list"),
-        "---\nname: Alpha\norder: 99\n---\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join("beta.list"),
-        "---\nname: Beta\norder: 1\n---\n",
-    )
-    .unwrap();
+    fs::write(dir.join("alpha.list"), "---\nname: Alpha\norder: 99\n---\n").unwrap();
+    fs::write(dir.join("beta.list"), "---\nname: Beta\norder: 1\n---\n").unwrap();
 
     let lists = load_all(&dir);
     fs::remove_dir_all(&dir).unwrap();
@@ -80,11 +60,7 @@ fn skips_non_list_files() {
     let dir = temp_path("skip_non_list");
     fs::create_dir_all(&dir).unwrap();
 
-    fs::write(
-        dir.join("valid.list"),
-        "---\nname: Valid\n---\n",
-    )
-    .unwrap();
+    fs::write(dir.join("valid.list"), "---\nname: Valid\n---\n").unwrap();
     fs::write(dir.join("readme.txt"), "this is a text file").unwrap();
     fs::write(dir.join("notes.md"), "# markdown notes").unwrap();
 
@@ -101,11 +77,7 @@ fn malformed_file_included_with_parse_error() {
     fs::create_dir_all(&dir).unwrap();
 
     // File without frontmatter delimiters
-    fs::write(
-        dir.join("broken.list"),
-        "not done\ndue < today\n",
-    )
-    .unwrap();
+    fs::write(dir.join("broken.list"), "not done\ndue < today\n").unwrap();
 
     let lists = load_all(&dir);
     fs::remove_dir_all(&dir).unwrap();

@@ -1,10 +1,10 @@
 pub mod bootstrap;
-pub mod smartlist;
 pub mod cli;
 pub mod config;
 pub mod parser;
 pub mod query;
 pub mod refresh;
+pub mod smartlist;
 pub mod store;
 pub mod task;
 pub mod tui;

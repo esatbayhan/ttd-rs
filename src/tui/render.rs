@@ -5,8 +5,8 @@ use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
-    ScrollbarOrientation, ScrollbarState, Wrap,
+    Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
+    ScrollbarState, Wrap,
 };
 
 use super::app::{AppMode, AppState, FocusArea};
@@ -94,7 +94,17 @@ fn render_main(frame: &mut Frame<'_>, app: &AppState) {
         vec![Line::raw("Tasks")]
     };
 
-    render_main_shell(frame, app, items, task_content, "Filters", "Tasks", None, None, 0);
+    render_main_shell(
+        frame,
+        app,
+        items,
+        task_content,
+        "Filters",
+        "Tasks",
+        None,
+        None,
+        0,
+    );
     render_overlays(frame, app);
 }
 
@@ -125,7 +135,9 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
                         .get(*index)
                         .is_some_and(|l| l.parse_error.is_some()) =>
                 {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::DIM)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::DIM)
                 }
                 _ if *item == session.active_sidebar_item() => {
                     Style::default().add_modifier(Modifier::BOLD)
@@ -137,7 +149,12 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
                 | SidebarItem::Separator => Style::default().add_modifier(Modifier::DIM),
                 _ => Style::default(),
             };
-            ListItem::new(sidebar_label(item, session.smart_lists(), session.collapsed_groups())).style(style)
+            ListItem::new(sidebar_label(
+                item,
+                session.smart_lists(),
+                session.collapsed_groups(),
+            ))
+            .style(style)
         })
         .collect::<Vec<_>>();
 
@@ -148,7 +165,12 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
 
     let sidebar_title = active_filter_title(&session.active_sidebar_item(), session.smart_lists());
     let indicator = session.override_indicator();
-    let tasks_title = format!("{} ({}){}", sidebar_title, session.visible_tasks().len(), indicator);
+    let tasks_title = format!(
+        "{} ({}){}",
+        sidebar_title,
+        session.visible_tasks().len(),
+        indicator
+    );
 
     let mut task_lines: Vec<Line> = Vec::new();
 
@@ -265,7 +287,14 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
         let pane_height = chunks[1].height.saturating_sub(2) as usize;
         let inner_width = chunks[1].width.saturating_sub(2);
         let previous = layout.and_then(|l| l.get()).map(|r| r.task_scroll_offset);
-        compute_scroll_offset_with_previous(&task_lines, selected_first_line, selected_last_line, inner_width, pane_height, previous)
+        compute_scroll_offset_with_previous(
+            &task_lines,
+            selected_first_line,
+            selected_last_line,
+            inner_width,
+            pane_height,
+            previous,
+        )
     };
 
     render_main_shell(
@@ -304,13 +333,15 @@ fn render_main_shell(
         .split(outer[0]);
 
     let sidebar_item_count = sidebar.len();
-    let previous_offset = layout.and_then(|l| l.get()).map(|r| r.sidebar_offset).unwrap_or(0);
+    let previous_offset = layout
+        .and_then(|l| l.get())
+        .map(|r| r.sidebar_offset)
+        .unwrap_or(0);
     let mut list_state = ListState::default()
         .with_selected(selected_sidebar_index)
         .with_offset(previous_offset);
     frame.render_stateful_widget(
-        List::new(sidebar)
-            .block(panel(sidebar_title, app.focus == FocusArea::Sidebar)),
+        List::new(sidebar).block(panel(sidebar_title, app.focus == FocusArea::Sidebar)),
         chunks[0],
         &mut list_state,
     );
@@ -393,7 +424,10 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
             .map(|(i, field)| {
                 let label = crate::smartlist::field_display_name(field);
                 let style = if i == picker.selected_index {
-                    Style::default().add_modifier(Modifier::BOLD).fg(Color::White).bg(Color::DarkGray)
+                    Style::default()
+                        .add_modifier(Modifier::BOLD)
+                        .fg(Color::White)
+                        .bg(Color::DarkGray)
                 } else {
                     Style::default()
                 };
@@ -625,7 +659,14 @@ pub fn compute_scroll_offset(
     inner_width: u16,
     pane_height: usize,
 ) -> u16 {
-    compute_scroll_offset_with_previous(lines, selected_line_index, selected_line_index, inner_width, pane_height, None)
+    compute_scroll_offset_with_previous(
+        lines,
+        selected_line_index,
+        selected_line_index,
+        inner_width,
+        pane_height,
+        None,
+    )
 }
 
 pub fn compute_scroll_offset_with_previous(

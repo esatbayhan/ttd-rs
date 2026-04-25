@@ -6,7 +6,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind, MouseButton};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+    MouseButton, MouseEventKind,
+};
 use crossterm::terminal;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -18,7 +21,9 @@ use ttd::cli::{Cli, Command};
 use ttd::config::ConfigPaths;
 use ttd::store::TaskStore;
 use ttd::tui::app::{AppMode, AppState};
-use ttd::tui::mouse::{DoubleClickTracker, MouseAction, resolve_mouse_action, resolve_scroll_action};
+use ttd::tui::mouse::{
+    DoubleClickTracker, MouseAction, resolve_mouse_action, resolve_scroll_action,
+};
 use ttd::tui::render::{LayoutRects, render_session_frame, render_session_frame_with_layout};
 use ttd::tui::session::TuiSession;
 
@@ -172,13 +177,17 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                                                 session.dispatch_mouse_sidebar(index);
                                             }
                                             MouseAction::ClickTaskPane { row } => {
-                                                if let Some(task_index) =
-                                                        session.task_index_for_visual_row(row, rects.task_pane_inner_width)
+                                                if let Some(task_index) = session
+                                                    .task_index_for_visual_row(
+                                                        row,
+                                                        rects.task_pane_inner_width,
+                                                    )
                                                 {
                                                     if double_click.record(task_index) {
                                                         session.dispatch_mouse_task_edit()?;
                                                     } else {
-                                                        session.dispatch_mouse_task_select(task_index);
+                                                        session
+                                                            .dispatch_mouse_task_select(task_index);
                                                     }
                                                 }
                                             }
@@ -190,9 +199,17 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                                     if let Some(action) =
                                         resolve_scroll_action(mouse.column, mouse.row, &rects, -3)
                                     {
-                                        if let MouseAction::Scroll { in_task_pane, delta } = action {
+                                        if let MouseAction::Scroll {
+                                            in_task_pane,
+                                            delta,
+                                        } = action
+                                        {
                                             if in_task_pane {
-                                                session.apply_task_scroll(delta, rects.visual_line_count, rects.pane_height);
+                                                session.apply_task_scroll(
+                                                    delta,
+                                                    rects.visual_line_count,
+                                                    rects.pane_height,
+                                                );
                                             } else {
                                                 session.apply_sidebar_scroll(delta);
                                             }
@@ -203,9 +220,17 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                                     if let Some(action) =
                                         resolve_scroll_action(mouse.column, mouse.row, &rects, 3)
                                     {
-                                        if let MouseAction::Scroll { in_task_pane, delta } = action {
+                                        if let MouseAction::Scroll {
+                                            in_task_pane,
+                                            delta,
+                                        } = action
+                                        {
                                             if in_task_pane {
-                                                session.apply_task_scroll(delta, rects.visual_line_count, rects.pane_height);
+                                                session.apply_task_scroll(
+                                                    delta,
+                                                    rects.visual_line_count,
+                                                    rects.pane_height,
+                                                );
                                             } else {
                                                 session.apply_sidebar_scroll(delta);
                                             }
@@ -246,7 +271,11 @@ fn init_live_terminal() -> io::Result<ratatui::DefaultTerminal> {
         let terminal = ratatui::try_init_with_options(TerminalOptions {
             viewport: Viewport::Fixed(Rect::new(0, 0, 80, 24)),
         })?;
-        crossterm::execute!(io::stdout(), terminal::EnterAlternateScreen, EnableMouseCapture)?;
+        crossterm::execute!(
+            io::stdout(),
+            terminal::EnterAlternateScreen,
+            EnableMouseCapture
+        )?;
         return Ok(terminal);
     }
 

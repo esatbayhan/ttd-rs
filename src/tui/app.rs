@@ -372,10 +372,19 @@ impl AppState {
     fn handle_picker_key(&mut self, key: &str) -> Option<AppAction> {
         let picker = self.picker.as_mut()?;
         match key {
-            "j" | "down" => { picker.move_down(); None }
-            "k" | "up" => { picker.move_up(); None }
+            "j" | "down" => {
+                picker.move_down();
+                None
+            }
+            "k" | "up" => {
+                picker.move_up();
+                None
+            }
             "enter" => Some(AppAction::PickerSelect),
-            "esc" => { self.picker = None; Some(AppAction::Cancel) }
+            "esc" => {
+                self.picker = None;
+                Some(AppAction::Cancel)
+            }
             _ => None,
         }
     }

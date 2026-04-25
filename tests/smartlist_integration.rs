@@ -4,7 +4,11 @@ use ttd::tui::session::{SidebarItem, TuiSession};
 
 fn temp_path(name: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
-    path.push(format!("ttd-smartlist-integ-{}-{}", name, std::process::id()));
+    path.push(format!(
+        "ttd-smartlist-integ-{}-{}",
+        name,
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&path);
     path
 }

@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;
-use ttd::tui::mouse::{DoubleClickTracker, MouseAction, resolve_mouse_action, resolve_scroll_action};
-use ttd::tui::render::{LayoutRects, Rects, render_session_frame_with_layout};
 use ttd::tui::app::FocusArea;
+use ttd::tui::mouse::{
+    DoubleClickTracker, MouseAction, resolve_mouse_action, resolve_scroll_action,
+};
+use ttd::tui::render::{LayoutRects, Rects, render_session_frame_with_layout};
 use ttd::tui::session::{SidebarItem, TuiSession};
 
 fn temp_path(name: &str) -> PathBuf {
@@ -47,9 +49,14 @@ fn layout_rects_are_populated_after_render() {
         .draw(|frame| render_session_frame_with_layout(frame, &session, &layout))
         .unwrap();
 
-    let rects = layout.get().expect("layout rects should be populated after render");
+    let rects = layout
+        .get()
+        .expect("layout rects should be populated after render");
     assert!(rects.sidebar.width > 0, "sidebar width should be non-zero");
-    assert!(rects.task_pane.width > 0, "task_pane width should be non-zero");
+    assert!(
+        rects.task_pane.width > 0,
+        "task_pane width should be non-zero"
+    );
 }
 
 #[test]
@@ -256,7 +263,11 @@ fn scroll_wheel_changes_task_scroll_offset() {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
     write_standard_lists(&root);
     for i in 0..30 {
-        fs::write(root.join(format!("{i:02}.txt")), format!("Task number {i}\n")).unwrap();
+        fs::write(
+            root.join(format!("{i:02}.txt")),
+            format!("Task number {i}\n"),
+        )
+        .unwrap();
     }
 
     let mut session = TuiSession::open(root, "2026-04-04").unwrap();
@@ -279,7 +290,7 @@ fn scroll_wheel_changes_task_scroll_offset() {
 fn double_click_tracker_detects_double_click() {
     let mut tracker = DoubleClickTracker::new();
     assert!(!tracker.record(0)); // first click
-    assert!(tracker.record(0));  // double click
+    assert!(tracker.record(0)); // double click
     assert!(!tracker.record(0)); // reset, so single click again
 }
 
@@ -302,9 +313,7 @@ fn sidebar_click_with_scroll_offset_maps_correctly() {
         pane_height: 20,
         task_scroll_offset: 0,
     };
-    let sidebar_items: Vec<SidebarItem> = (0..10)
-        .map(|i| SidebarItem::SmartList(i))
-        .collect();
+    let sidebar_items: Vec<SidebarItem> = (0..10).map(|i| SidebarItem::SmartList(i)).collect();
 
     // Click on first visible row (y=1) with offset 3 → item index 3
     let action = resolve_mouse_action(5, 1, &rects, &sidebar_items);

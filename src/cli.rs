@@ -3,7 +3,11 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "ttd", version, about = "A plain-text task manager inspired by todo.txt")]
+#[command(
+    name = "ttd",
+    version,
+    about = "A plain-text task manager inspired by todo.txt"
+)]
 pub struct Cli {
     /// Directory containing the task files
     #[arg(long)]

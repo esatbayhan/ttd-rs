@@ -543,7 +543,10 @@ fn session_render_includes_help_bar() {
     let text = render_text(&session);
 
     assert!(text.contains("add"), "help bar should contain 'add'");
-    assert!(text.contains("toggle done"), "help bar should contain 'toggle done'");
+    assert!(
+        text.contains("toggle done"),
+        "help bar should contain 'toggle done'"
+    );
 }
 
 #[test]
@@ -803,7 +806,10 @@ fn sidebar_scrollbar_appears_when_items_overflow() {
             break;
         }
     }
-    assert!(found_thumb, "expected scrollbar thumb in sidebar right edge");
+    assert!(
+        found_thumb,
+        "expected scrollbar thumb in sidebar right edge"
+    );
 }
 
 #[test]
@@ -842,7 +848,10 @@ fn task_pane_scrollbar_appears_when_tasks_overflow() {
             break;
         }
     }
-    assert!(found_thumb, "expected scrollbar thumb in task pane right edge");
+    assert!(
+        found_thumb,
+        "expected scrollbar thumb in task pane right edge"
+    );
 }
 
 #[test]
@@ -1016,14 +1025,20 @@ fn picker_modal_renders_with_title_and_field_list() {
     session.app_mut().picker = Some(PickerState::new(PickerKind::Sort));
 
     let text = render_text(&session);
-    assert!(text.contains("Sort by"), "picker should show 'Sort by' title");
-    assert!(text.contains("priority"), "picker should show 'priority' field");
+    assert!(
+        text.contains("Sort by"),
+        "picker should show 'Sort by' title"
+    );
+    assert!(
+        text.contains("priority"),
+        "picker should show 'priority' field"
+    );
     assert!(text.contains("due"), "picker should show 'due' field");
 }
 
 #[test]
 fn task_pane_title_shows_sort_override_indicator() {
-    use ttd::smartlist::{Directive, Direction, Field};
+    use ttd::smartlist::{Direction, Directive, Field};
 
     let root = temp_path("sort-override-indicator");
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
@@ -1031,15 +1046,21 @@ fn task_pane_title_shows_sort_override_indicator() {
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
     let mut session = TuiSession::open(root, "2026-03-31").unwrap();
-    session.set_sort_override(Directive { field: Field::Due, direction: Direction::Asc });
+    session.set_sort_override(Directive {
+        field: Field::Due,
+        direction: Direction::Asc,
+    });
 
     let text = render_text(&session);
-    assert!(text.contains("[sort: due"), "task pane title should show sort override indicator");
+    assert!(
+        text.contains("[sort: due"),
+        "task pane title should show sort override indicator"
+    );
 }
 
 #[test]
 fn task_pane_title_shows_group_override_indicator() {
-    use ttd::smartlist::{Directive, Direction, Field};
+    use ttd::smartlist::{Direction, Directive, Field};
 
     let root = temp_path("group-override-indicator");
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
@@ -1047,9 +1068,14 @@ fn task_pane_title_shows_group_override_indicator() {
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
     let mut session = TuiSession::open(root, "2026-03-31").unwrap();
-    session.set_group_override(Directive { field: Field::Priority, direction: Direction::Asc });
+    session.set_group_override(Directive {
+        field: Field::Priority,
+        direction: Direction::Asc,
+    });
 
     let text = render_text(&session);
-    assert!(text.contains("[group: priority"), "task pane title should show group override indicator");
+    assert!(
+        text.contains("[group: priority"),
+        "task pane title should show group override indicator"
+    );
 }
-
