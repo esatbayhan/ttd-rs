@@ -1,0 +1,9 @@
+---
+name: High Priority
+icon: 🔥
+description: Priority A or B; sorted by priority then creation date
+---
+priority above C
+
+sort by priority asc
+sort by creation_date asc

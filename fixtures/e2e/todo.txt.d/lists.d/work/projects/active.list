@@ -1,0 +1,12 @@
+---
+name: Active in Work
+icon: 💼
+description: Open tasks for the +Work project (exercises {{dir:1}} ancestor template variable)
+---
+project includes {{dir:1}}
+not done
+
+sort by priority asc
+group by context asc
+
+prefill project {{dir:1}}

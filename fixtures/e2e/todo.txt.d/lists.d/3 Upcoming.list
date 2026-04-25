@@ -1,0 +1,9 @@
+---
+name: Upcoming
+icon: 🗓️
+description: Tasks due within the next 7 days, grouped and sorted by due date
+---
+due <= today + 7
+
+sort by due asc
+group by due asc

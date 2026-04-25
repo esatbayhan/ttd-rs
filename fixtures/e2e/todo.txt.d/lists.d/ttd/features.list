@@ -1,0 +1,13 @@
+---
+name: Features
+icon: ✨
+description: Feature requests filed against +ttd; new tasks default to +ttd @feature
+---
+project includes {{dir}}
+context includes feature
+not done
+
+sort by priority asc
+
+prefill project {{dir}}
+prefill context feature

@@ -1,0 +1,8 @@
+---
+name: Duplicate Scalar Prefill
+description: Lenient parsing — first valid `prefill due` wins; second is silently ignored
+---
+not done
+
+prefill due today + 1
+prefill due today + 7

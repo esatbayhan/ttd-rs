@@ -1,0 +1,10 @@
+---
+name: Inbox
+icon: 📥
+description: Tasks with no date metadata; needs triage
+---
+no due
+no scheduled
+no starting
+
+sort by creation_date asc

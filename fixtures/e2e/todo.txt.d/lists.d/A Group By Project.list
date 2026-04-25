@@ -1,0 +1,9 @@
+---
+name: By Project
+icon: 🗂️
+description: All open tasks grouped by project (exercises group + sort directives together)
+---
+has project
+
+group by project asc
+sort by priority asc

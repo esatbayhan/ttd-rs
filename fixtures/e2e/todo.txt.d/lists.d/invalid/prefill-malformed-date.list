@@ -1,0 +1,8 @@
+---
+name: Bad Prefill Date
+description: Lenient parsing — `prefill due next-week` is malformed and discarded; the subsequent valid `prefill due today+3` wins
+---
+not done
+
+prefill due next-week
+prefill due today+3

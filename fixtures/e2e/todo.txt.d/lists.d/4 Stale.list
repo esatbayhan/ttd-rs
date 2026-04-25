@@ -1,0 +1,10 @@
+---
+name: Stale
+icon: 🕸️
+description: Tasks not reviewed in the last 30 days, or never reviewed
+---
+updated < today - 30
+
+OR
+
+no updated
