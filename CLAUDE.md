@@ -37,6 +37,12 @@ Tests in [tests/](tests/) are integration tests; each module has a corresponding
 
 No version prefix in branch names. Version tracking lives in `Cargo.toml`, git tags, and PR labels.
 
+**Never work directly on `main`.**
+
+- Every code change — features, fixes, chores, refactors — happens on its own branch. Switch to (or create) the branch *before* you start editing files, not after.
+- The only thing that may land on `main` directly is an explicit, user-requested merge (e.g. "merge this into main"). Without that explicit instruction, do not commit, fast-forward, or fold work into `main`.
+- If you find yourself with uncommitted changes on `main`, stop and move them to a branch (`git checkout -b <type>/<short-name>`) before continuing.
+
 **Base branch:**
 
 - Default: branch off `main`.
@@ -52,9 +58,11 @@ When multiple Claude sessions might run in parallel, use a git worktree for new 
 
 When done: `git worktree remove ../ttd-rs-<short-name>` after the branch is merged.
 
-**Pushing:**
+**Commits, merges, and pushes:**
 
-- Never `git push` without explicit go-ahead. Commit, tag, and branch freely — pushing to remote requires explicit approval every time. Prior approval does not carry over.
+- **Commits are automatic.** Once work on a branch is in a sensible state, commit it without asking. Don't wait for a "please commit" — the default is *commit freely*. Same for creating branches and annotated tags.
+- **Merges require explicit approval every time.** Merging into `main` (or any other branch) only happens when the user says so in the current turn. Prior approval does not carry over.
+- **Pushes require explicit approval every time.** `git push` for any ref — branches, tags, force-push — only happens when the user says so in the current turn. Prior approval does not carry over.
 
 ## Pre-Commit Checks
 
