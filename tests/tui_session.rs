@@ -134,6 +134,7 @@ fn sidebar_focus_navigation_moves_between_smart_and_dynamic_items() {
 
     session.dispatch_key("j").unwrap();
     session.dispatch_key("j").unwrap();
+    session.dispatch_key("enter").unwrap();
 
     assert_eq!(
         session.active_sidebar_item(),

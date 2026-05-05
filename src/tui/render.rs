@@ -131,7 +131,11 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
     let sidebar = session
         .sidebar_items()
         .iter()
-        .map(|item| {
+        .enumerate()
+        .map(|(i, item)| {
+            let is_active = *item == session.active_sidebar_item();
+            let is_cursor = session.sidebar_cursor_index() == Some(i);
+            let show_cursor = !is_active && is_cursor && app.focus == FocusArea::Sidebar;
             let style = match item {
                 SidebarItem::SmartList(index)
                     if session
@@ -139,13 +143,22 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
                         .get(*index)
                         .is_some_and(|l| l.parse_error.is_some()) =>
                 {
-                    Style::default()
+                    let mut s = Style::default()
                         .fg(Color::Yellow)
-                        .add_modifier(Modifier::DIM)
+                        .add_modifier(Modifier::DIM);
+                    if show_cursor {
+                        s = s.add_modifier(Modifier::UNDERLINED);
+                    }
+                    s
                 }
-                _ if *item == session.active_sidebar_item() => {
-                    Style::default().add_modifier(Modifier::BOLD)
+                _ if is_active => {
+                    let mut s = Style::default().add_modifier(Modifier::BOLD);
+                    if show_cursor {
+                        s = s.add_modifier(Modifier::UNDERLINED);
+                    }
+                    s
                 }
+                _ if show_cursor => Style::default().add_modifier(Modifier::UNDERLINED),
                 SidebarItem::GroupHeader(_)
                 | SidebarItem::ListsHeader
                 | SidebarItem::ProjectsHeader
@@ -162,10 +175,7 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
         })
         .collect::<Vec<_>>();
 
-    let selected_sidebar_index = session
-        .sidebar_items()
-        .iter()
-        .position(|item| *item == session.active_sidebar_item());
+    let selected_sidebar_index = session.sidebar_cursor_index();
 
     let sidebar_title = active_filter_title(&session.active_sidebar_item(), session.smart_lists());
     let indicator = session.override_indicator();

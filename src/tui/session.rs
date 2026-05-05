@@ -150,6 +150,7 @@ pub struct TuiSession {
     sidebar_max_width_pct: u8,
     paths: ConfigPaths,
     last_terminal_cols: Cell<u16>,
+    sidebar_cursor: usize,
 }
 
 impl TuiSession {
@@ -205,6 +206,7 @@ impl TuiSession {
             sidebar_max_width_pct: 50,
             paths,
             last_terminal_cols: Cell::new(0),
+            sidebar_cursor: 0,
         }
     }
 
@@ -250,6 +252,7 @@ impl TuiSession {
             sidebar_max_width_pct,
             paths,
             last_terminal_cols: Cell::new(0),
+            sidebar_cursor: 0,
         };
         session.rebuild();
         Ok(session)
@@ -520,8 +523,28 @@ impl TuiSession {
         self.task_scroll_override = Some(new_offset);
     }
 
-    pub fn apply_sidebar_scroll(&mut self, delta: isize) {
-        self.move_sidebar(delta);
+    pub fn apply_sidebar_scroll(&mut self, _delta: isize) {
+        // Sidebar scroll is driven by cursor position (j/k), not mouse wheel.
+        // Mouse scroll in the sidebar is intentionally a no-op.
+    }
+
+    pub fn sidebar_cursor_item(&self) -> Option<SidebarItem> {
+        let selectable = self.selectable_sidebar_indices();
+        selectable
+            .get(self.sidebar_cursor)
+            .map(|&idx| self.sidebar_items[idx].clone())
+    }
+
+    pub fn sidebar_cursor_index(&self) -> Option<usize> {
+        self.selectable_sidebar_indices()
+            .get(self.sidebar_cursor)
+            .copied()
+    }
+
+    pub fn activate_sidebar_cursor(&mut self) {
+        if let Some(item) = self.sidebar_cursor_item() {
+            self.select_sidebar_item(item);
+        }
     }
 
     pub fn select_sidebar_item(&mut self, item: SidebarItem) {
@@ -602,6 +625,14 @@ impl TuiSession {
     pub fn dispatch_mouse_sidebar(&mut self, sidebar_index: usize) {
         if let Some(item) = self.sidebar_items.get(sidebar_index).cloned() {
             self.app.focus = FocusArea::Sidebar;
+            // Update cursor to the clicked item's selectable position
+            if let Some(pos) = self
+                .selectable_sidebar_indices()
+                .iter()
+                .position(|&idx| idx == sidebar_index)
+            {
+                self.sidebar_cursor = pos;
+            }
             self.select_sidebar_item(item);
         }
     }
@@ -740,6 +771,10 @@ impl TuiSession {
                 })
                 .cloned()
                 .unwrap_or(SidebarItem::SmartList(0));
+        }
+        let max_cursor = self.selectable_sidebar_indices().len().saturating_sub(1);
+        if self.sidebar_cursor > max_cursor {
+            self.sidebar_cursor = max_cursor;
         }
         self.rebuild_visible_tasks();
     }
@@ -956,15 +991,19 @@ impl TuiSession {
                 self.reselect_task(wanted);
             }
             AppAction::ToggleGroup => {
-                if let SidebarItem::GroupHeader(path) = &self.active_sidebar_item {
-                    let path = path.clone();
+                if let Some(SidebarItem::GroupHeader(path)) = self.sidebar_cursor_item() {
                     if self.collapsed_groups.contains(&path) {
                         self.collapsed_groups.remove(&path);
                     } else {
                         self.collapsed_groups.insert(path);
                     }
                     self.rebuild();
+                } else {
+                    self.activate_sidebar_cursor();
                 }
+            }
+            AppAction::ActivateSidebarItem => {
+                self.activate_sidebar_cursor();
             }
             AppAction::OpenSortPicker | AppAction::OpenGroupPicker => {}
             AppAction::OpenListViewer => {
@@ -1037,13 +1076,13 @@ impl TuiSession {
         match self.app.focus {
             FocusArea::Sidebar => {
                 let selectable = self.selectable_sidebar_indices();
-                let target = if top {
-                    selectable.first().copied()
+                if selectable.is_empty() {
+                    return;
+                }
+                if top {
+                    self.sidebar_cursor = 0;
                 } else {
-                    selectable.last().copied()
-                };
-                if let Some(index) = target {
-                    self.select_sidebar_item(self.sidebar_items[index].clone());
+                    self.sidebar_cursor = selectable.len().saturating_sub(1);
                 }
             }
             FocusArea::TaskList => {
@@ -1064,12 +1103,9 @@ impl TuiSession {
             return;
         }
 
-        let current = selectable
-            .iter()
-            .position(|index| self.sidebar_items[*index] == self.active_sidebar_item)
-            .unwrap_or(0) as isize;
+        let current = self.sidebar_cursor as isize;
         let next = (current + delta).clamp(0, selectable.len().saturating_sub(1) as isize);
-        self.select_sidebar_item(self.sidebar_items[selectable[next as usize]].clone());
+        self.sidebar_cursor = next as usize;
     }
 
     fn move_task_list(&mut self, delta: isize) {

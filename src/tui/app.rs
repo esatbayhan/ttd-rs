@@ -108,6 +108,7 @@ pub enum AppAction {
     EditListExternally,
     ToggleSidebar,
     ResizeSidebar(isize),
+    ActivateSidebarItem,
 }
 
 pub struct AppState {
@@ -289,7 +290,10 @@ impl AppState {
             "k" | "up" => Some(AppAction::MoveUp),
             "gg" => Some(AppAction::MoveTop),
             "G" => Some(AppAction::MoveBottom),
-            "enter" => Some(AppAction::OpenSelected),
+            "enter" => match self.focus {
+                FocusArea::Sidebar => Some(AppAction::ActivateSidebarItem),
+                FocusArea::TaskList => Some(AppAction::OpenSelected),
+            },
             "a" => {
                 self.editor = Some(EditorState::quick_entry());
                 Some(AppAction::AddTask)
