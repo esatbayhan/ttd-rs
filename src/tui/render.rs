@@ -135,7 +135,7 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
         .map(|(i, item)| {
             let is_active = *item == session.active_sidebar_item();
             let is_cursor = session.sidebar_cursor_index() == Some(i);
-            let show_cursor = !is_active && is_cursor && app.focus == FocusArea::Sidebar;
+            let cursor_visible = is_cursor && app.focus == FocusArea::Sidebar;
             let cursor_bg = Style::default().bg(Color::DarkGray);
             let style = match item {
                 SidebarItem::SmartList(index)
@@ -147,13 +147,16 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
                     let mut s = Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::DIM);
-                    if show_cursor {
+                    if cursor_visible {
                         s = s.bg(Color::DarkGray);
                     }
                     s
                 }
+                _ if is_active && cursor_visible => Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .bg(Color::DarkGray),
                 _ if is_active => Style::default().add_modifier(Modifier::BOLD),
-                _ if show_cursor => cursor_bg,
+                _ if cursor_visible => cursor_bg,
                 SidebarItem::GroupHeader(_)
                 | SidebarItem::ListsHeader
                 | SidebarItem::ProjectsHeader
