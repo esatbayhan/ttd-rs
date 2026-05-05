@@ -368,15 +368,19 @@ fn render_main_shell(
 
         let sidebar_visible_height = sidebar_rect.height.saturating_sub(2) as usize;
         if sidebar_item_count > sidebar_visible_height {
+            let scroll_col = sidebar_rect.x + sidebar_rect.width.saturating_sub(2);
+            let scrollbar_rect = ratatui::layout::Rect::new(
+                scroll_col,
+                sidebar_rect.y + 1,
+                1,
+                sidebar_rect.height.saturating_sub(2),
+            );
             let mut scrollbar_state =
                 ScrollbarState::new(sidebar_item_count.saturating_sub(sidebar_visible_height))
                     .position(list_state.offset());
             frame.render_stateful_widget(
                 Scrollbar::new(ScrollbarOrientation::VerticalRight),
-                sidebar_rect.inner(Margin {
-                    vertical: 1,
-                    horizontal: 0,
-                }),
+                scrollbar_rect,
                 &mut scrollbar_state,
             );
         }

@@ -797,15 +797,15 @@ fn sidebar_scrollbar_appears_when_items_overflow() {
         .draw(|frame| render_session_frame(frame, &session))
         .unwrap();
 
-    // The scrollbar track character "│" or thumb "█" should appear
-    // in the rightmost column of the sidebar area.
+    // The scrollbar renders in a 1-column strip just inside the right border.
     let buf = terminal.backend().buffer();
     let sidebar_width = session.app().sidebar_width.get();
-    let sidebar_right_col = sidebar_width.saturating_sub(1);
+    let scrollbar_col = sidebar_width.saturating_sub(2);
     let mut found_thumb = false;
     for row in 1..9u16 {
-        let symbol = buf[(sidebar_right_col, row)].symbol();
-        if symbol == "█" || symbol == "▐" || symbol == "░" {
+        let symbol = buf[(scrollbar_col, row)].symbol();
+        if symbol == "█" || symbol == "▐" || symbol == "░" || symbol == "▲" || symbol == "▼"
+        {
             found_thumb = true;
             break;
         }
@@ -923,9 +923,10 @@ fn sidebar_scrollbar_hidden_when_items_fit() {
         .unwrap();
 
     let buf = terminal.backend().buffer();
-    let sidebar_right_col = 23u16;
+    let sidebar_width = session.app().sidebar_width.get();
+    let scrollbar_col = sidebar_width.saturating_sub(2);
     for row in 1..29u16 {
-        let symbol = buf[(sidebar_right_col, row)].symbol();
+        let symbol = buf[(scrollbar_col, row)].symbol();
         assert!(
             symbol != "█" && symbol != "▐" && symbol != "░",
             "unexpected scrollbar thumb at row {row} when content fits"
