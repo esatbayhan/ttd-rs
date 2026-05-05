@@ -5,7 +5,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::Parser;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
     MouseButton, MouseEventKind,
@@ -28,7 +27,7 @@ use ttd::tui::render::{LayoutRects, render_session_frame, render_session_frame_w
 use ttd::tui::session::TuiSession;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let cli = Cli::parse();
+    let cli = Cli::parse().map_err(|e| io::Error::other(e))?;
 
     if let Some(command) = cli.command {
         run_command(command, cli.task_dir)?;
@@ -45,7 +44,6 @@ fn run_command(command: Command, cli_task_dir: Option<PathBuf>) -> io::Result<()
 
     match command {
         Command::Add { line } => {
-            let line = line.join(" ");
             store.create_task(&line)?;
         }
         Command::List => {

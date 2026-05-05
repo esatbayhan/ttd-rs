@@ -21,7 +21,7 @@
 - [src/query.rs](src/query.rs) — filter / sort / group primitives shared by CLI and TUI
 - [src/smartlist/](src/smartlist/) — `.list` file parser, AST, and evaluator
 - [src/tui/](src/tui/) — TUI app, render loop, editor, mouse, session
-- [src/cli.rs](src/cli.rs), [src/main.rs](src/main.rs) — `clap` entry point
+- [src/cli.rs](src/cli.rs), [src/main.rs](src/main.rs) — CLI entry point (hand-rolled arg parser, no framework)
 - [src/bootstrap.rs](src/bootstrap.rs), [src/config.rs](src/config.rs) — first-run flow and config file
 
 Tests in [tests/](tests/) are integration tests; each module has a corresponding `*_*.rs` file. TUI behavior is exercised end-to-end via `expectrl` in [tests/tui_e2e.rs](tests/tui_e2e.rs) and friends.
@@ -76,9 +76,43 @@ cargo test
 
 `clippy` warnings are errors here (`-D warnings`). Don't silence them with `#[allow(...)]` unless there is a real reason — fix the underlying issue.
 
+## Dependency Policy
+
+**Minimize transitive dependencies.** Every crate added to `Cargo.toml` must justify itself against a hand-rolled or stdlib alternative. The bar: could a motivated programmer recreate the needed subset in an afternoon without introducing bugs?
+
+**Current dependencies and their rationale:**
+
+| Dependency | Why it stays | Why it's the only option |
+|---|---|---|
+| `ratatui` | TUI widgets, layout, rendering | No lighter TUI framework exists that provides `Paragraph`, `List`, `Block`, `Layout`, and `TestBackend`. Alternatives (cursive, tui-rs) are either heavier or unmaintained. |
+| `crossterm` | Terminal raw mode, events (key, mouse, resize), alternate screen | Required by `ratatui-crossterm` backend. Also used directly for event polling and terminal control. On Linux the `windows` default feature is dead code but we can't disable it (ratatui-crossterm enables defaults). |
+| `time` | `today_date()` — local date formatting | Already pulled in transitively by `ratatui-widgets` (calendar). Using it directly is zero-cost — same crate, same version. Replaces the `libc` + `unsafe` alternative we briefly tried. |
+| `expectrl` (dev) | End-to-end TUI tests via PTY | The only way to test the live TUI binary. Dev-only, doesn't affect release binary size or dep count. |
+
+**Dependencies that were removed and why:**
+
+| Removed | Replaced by | Reason |
+|---|---|---|
+| `clap` (10 unique transitive crates) | `std::env::args()` hand-rolled parser in `src/cli.rs` | CLI surface is 4 subcommands + `--task-dir`. clap's derive macros, help generation, and error formatting pulled in clap_builder, anstream, anstyle, clap_lex, strsim, and proc-macro infrastructure. Hand-rolling is ~60 lines. |
+
+**Rules for adding a dependency:**
+
+1. Exhaust the stdlib first. `std::env::args()`, `std::process::Command`, `std::fs`, `std::time` cover a lot.
+2. If a crate is already transitively present, using it directly is free. Prefer it over adding a new one.
+3. Before adding a crate for one function, ask: could this be done with what's already in the tree?
+4. When adding a dependency, disable unused default features. Set `default-features = false` and enumerate only what's needed.
+5. Prefer crates with few transitive dependencies. A crate with 0 deps is always better than one with 50, all else equal.
+
+**Why not go further:**
+
+- **ratatui can't be replaced.** The TUI is the product. Rewriting widgets, layout, and rendering from scratch would be hundreds of hours and produce a worse result.
+- **crossterm can't be replaced.** It's pulled in by ratatui-crossterm regardless. termion isn't lighter *and* ratatui has no production-ready termion backend.
+- **expectrl stays.** The e2e tests catch real regressions. It's dev-only.
+- **time is already transitively present.** Using it directly costs nothing — same crate already compiled for ratatui-widgets.
+
 ## Version Bumping
 
-The version lives in [Cargo.toml](Cargo.toml) under `[package].version`. Bumping it also updates `Cargo.lock` (run `cargo build` or `cargo update -p ttd` after editing). The CLI reads the version via `clap`'s `version` derive, so no other location needs updating.
+The version lives in [Cargo.toml](Cargo.toml) under `[package].version`. Bumping it also updates `Cargo.lock` (run `cargo build` or `cargo update -p ttd` after editing). The CLI reads the version via `env!("CARGO_PKG_VERSION")`, so no other location needs updating.
 
 Semver:
 - new `feat` → minor bump
@@ -144,7 +178,7 @@ When adding a feature that touches the task model, smart-list grammar, or sideba
 3. **Query layer.** Add filter / sort / group support in `query.rs` so both CLI and TUI pick it up uniformly.
 4. **Smart lists.** Extend the smart-list parser ([src/smartlist/parser.rs](src/smartlist/parser.rs)) and evaluator ([src/smartlist/eval.rs](src/smartlist/eval.rs)) if the new field should be filterable.
 5. **TUI surface.** Wire the field into render and editor only after the underlying layers work.
-6. **CLI surface.** Add the matching flag to `clap` derives in [src/cli.rs](src/cli.rs) for scriptability.
+6. **CLI surface.** Add the matching argument parser branch in [src/cli.rs](src/cli.rs) for scriptability.
 7. **Docs.** Update the README keybinding table and feature list if user-visible.
 8. **End-to-end fixtures.** Update [fixtures/e2e/](fixtures/e2e/) and its README so the new behavior is exercisable end-to-end (see § End-to-End Fixtures above).
 

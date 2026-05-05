@@ -10,9 +10,8 @@ keywords = ["todo", "task", "tui", "cli", "productivity"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-clap = { version = "4.5.60", features = ["derive"] }
 crossterm = "0.29.0"
-ratatui = { version = "0.30.0", features = ["unstable-rendered-line-info"] }
+ratatui = { version = "0.30.0", default-features = false, features = ["crossterm", "unstable-rendered-line-info"] }
 time = { version = "0.3.47", features = ["formatting", "parsing", "macros", "local-offset"] }
 
 [dev-dependencies]
