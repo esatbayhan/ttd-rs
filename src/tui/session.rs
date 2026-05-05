@@ -523,9 +523,13 @@ impl TuiSession {
         self.task_scroll_override = Some(new_offset);
     }
 
-    pub fn apply_sidebar_scroll(&mut self, _delta: isize) {
-        // Sidebar scroll is driven by cursor position (j/k), not mouse wheel.
-        // Mouse scroll in the sidebar is intentionally a no-op.
+    pub fn apply_sidebar_scroll(&mut self, delta: isize) {
+        // Mouse scroll moves the cursor one position at a time
+        if delta > 0 {
+            self.move_sidebar(1);
+        } else if delta < 0 {
+            self.move_sidebar(-1);
+        }
     }
 
     pub fn sidebar_cursor_item(&self) -> Option<SidebarItem> {
