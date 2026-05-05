@@ -458,7 +458,8 @@ fn fixture_covers_documented_parser_features() {
 /// empty. This drives the actual session like the live TUI binary does.
 #[test]
 fn pressing_a_on_work_inbox_seeds_editor_with_prefill() {
-    let mut session = TuiSession::open(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
+    let mut session =
+        TuiSession::open_default(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
     let idx = session
         .smart_lists()
         .iter()
@@ -492,7 +493,8 @@ fn pressing_a_on_work_inbox_seeds_editor_with_prefill() {
 
 #[test]
 fn pressing_a_on_this_week_seeds_priority_and_dates() {
-    let mut session = TuiSession::open(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
+    let mut session =
+        TuiSession::open_default(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
     let idx = session
         .smart_lists()
         .iter()
@@ -523,7 +525,8 @@ fn rendered_editor_shows_prefill_content_after_pressing_a() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
-    let mut session = TuiSession::open(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
+    let mut session =
+        TuiSession::open_default(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
     let idx = session
         .smart_lists()
         .iter()
@@ -560,7 +563,8 @@ fn rendered_editor_shows_prefill_content_after_pressing_a() {
 #[test]
 fn pressing_a_on_today_leaves_editor_empty() {
     // Today list has NO prefill — pressing 'a' should yield a blank editor.
-    let mut session = TuiSession::open(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
+    let mut session =
+        TuiSession::open_default(Path::new(FIXTURE_ROOT).to_path_buf(), TODAY).unwrap();
     let idx = session
         .smart_lists()
         .iter()

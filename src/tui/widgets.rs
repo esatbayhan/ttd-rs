@@ -78,6 +78,8 @@ fn help_bar_entries(app: &AppState) -> Vec<(&'static str, &'static str)> {
         ("o", "group"),
         ("r", "reverse"),
         ("/", "search"),
+        ("ctrl+b", "sidebar"),
+        ("ctrl+←/→", "resize"),
         ("q", "quit"),
     ]
 }

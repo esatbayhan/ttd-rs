@@ -42,7 +42,7 @@ fn layout_rects_are_populated_after_render() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom +Family @phone\n").unwrap();
 
-    let session = TuiSession::open(root, "2026-03-30").unwrap();
+    let session = TuiSession::open_default(root, "2026-03-30").unwrap();
     let layout = LayoutRects::default();
 
     let backend = TestBackend::new(80, 24);
@@ -223,7 +223,7 @@ fn dispatch_mouse_sidebar_click_switches_view_and_focus() {
     fs::write(root.join("a.txt"), "Buy milk +Family\n").unwrap();
     fs::write(root.join("b.txt"), "File taxes +Admin\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-04-04").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-04").unwrap();
     assert_eq!(session.active_sidebar_item(), SidebarItem::SmartList(0));
 
     let admin_index = session
@@ -249,7 +249,7 @@ fn dispatch_mouse_task_click_selects_task_and_focuses_pane() {
     fs::write(root.join("a.txt"), "First task\n").unwrap();
     fs::write(root.join("b.txt"), "Second task\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-04-04").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-04").unwrap();
     assert_eq!(session.app().focus, FocusArea::Sidebar);
 
     session.dispatch_mouse_task_select(1);
@@ -272,7 +272,7 @@ fn scroll_wheel_changes_task_scroll_offset() {
         .unwrap();
     }
 
-    let mut session = TuiSession::open(root, "2026-04-04").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-04").unwrap();
 
     assert_eq!(session.task_scroll_offset(), 0);
 
@@ -330,7 +330,7 @@ fn scroll_clamps_to_max_offset() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Task\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-04-04").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-04").unwrap();
 
     session.apply_task_scroll(100, 50, 20);
     assert_eq!(session.task_scroll_offset(), 30);
@@ -347,7 +347,7 @@ fn mouse_scroll_task_pane_clamps_to_zero() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Only task\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-04-04").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-04").unwrap();
 
     session.apply_task_scroll(-5, 10, 20);
     assert_eq!(session.task_scroll_offset(), 0);
@@ -360,7 +360,7 @@ fn task_click_on_empty_list_does_nothing() {
     write_standard_lists(&root);
     // No task files — empty list
 
-    let mut session = TuiSession::open(root, "2026-04-04").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-04").unwrap();
 
     let result = session.task_index_for_visual_row(0, 54);
     assert_eq!(result, None);

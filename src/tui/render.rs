@@ -111,15 +111,19 @@ fn render_main(frame: &mut Frame<'_>, app: &AppState) {
 fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Option<&LayoutRects>) {
     let app = session.app();
 
+    session.maybe_handle_resize(frame.area().width);
+
     // Pre-compute task pane width for hanging-indent word wrap
+    let sidebar_width = app.sidebar_width.get();
     let task_pane_inner_width = {
         let outer = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(frame.area());
+        let task_min = if sidebar_width > 0 { 24 } else { 0 };
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(24), Constraint::Min(24)])
+            .constraints([Constraint::Length(sidebar_width), Constraint::Min(task_min)])
             .split(outer[0]);
         chunks[1].width.saturating_sub(2)
     };
@@ -280,9 +284,10 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(frame.area());
+        let task_min = if sidebar_width > 0 { 24 } else { 0 };
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(24), Constraint::Min(24)])
+            .constraints([Constraint::Length(sidebar_width), Constraint::Min(task_min)])
             .split(outer[0]);
         let pane_height = chunks[1].height.saturating_sub(2) as usize;
         let inner_width = chunks[1].width.saturating_sub(2);
@@ -327,42 +332,53 @@ fn render_main_shell(
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(frame.area());
 
+    let sidebar_width = app.sidebar_width.get();
+    let show_sidebar = sidebar_width > 0;
+    let task_min = if show_sidebar { 24 } else { 0 };
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(24), Constraint::Min(24)])
+        .constraints([Constraint::Length(sidebar_width), Constraint::Min(task_min)])
         .split(outer[0]);
 
+    let sidebar_rect = chunks[0];
+    let task_rect = chunks[1];
+
     let sidebar_item_count = sidebar.len();
-    let previous_offset = layout
-        .and_then(|l| l.get())
-        .map(|r| r.sidebar_offset)
-        .unwrap_or(0);
-    let mut list_state = ListState::default()
-        .with_selected(selected_sidebar_index)
-        .with_offset(previous_offset);
-    frame.render_stateful_widget(
-        List::new(sidebar).block(panel(sidebar_title, app.focus == FocusArea::Sidebar)),
-        chunks[0],
-        &mut list_state,
-    );
-
-    let sidebar_visible_height = chunks[0].height.saturating_sub(2) as usize;
-    if sidebar_item_count > sidebar_visible_height {
-        let mut scrollbar_state =
-            ScrollbarState::new(sidebar_item_count.saturating_sub(sidebar_visible_height))
-                .position(list_state.offset());
+    let sidebar_offset = if show_sidebar {
+        let previous_offset = layout
+            .and_then(|l| l.get())
+            .map(|r| r.sidebar_offset)
+            .unwrap_or(0);
+        let mut list_state = ListState::default()
+            .with_selected(selected_sidebar_index)
+            .with_offset(previous_offset);
         frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight),
-            chunks[0].inner(Margin {
-                vertical: 1,
-                horizontal: 0,
-            }),
-            &mut scrollbar_state,
+            List::new(sidebar).block(panel(sidebar_title, app.focus == FocusArea::Sidebar)),
+            sidebar_rect,
+            &mut list_state,
         );
-    }
 
-    let pane_height = chunks[1].height.saturating_sub(2) as usize;
-    let inner_width = chunks[1].width.saturating_sub(2);
+        let sidebar_visible_height = sidebar_rect.height.saturating_sub(2) as usize;
+        if sidebar_item_count > sidebar_visible_height {
+            let mut scrollbar_state =
+                ScrollbarState::new(sidebar_item_count.saturating_sub(sidebar_visible_height))
+                    .position(list_state.offset());
+            frame.render_stateful_widget(
+                Scrollbar::new(ScrollbarOrientation::VerticalRight),
+                sidebar_rect.inner(Margin {
+                    vertical: 1,
+                    horizontal: 0,
+                }),
+                &mut scrollbar_state,
+            );
+        }
+        list_state.offset()
+    } else {
+        0
+    };
+
+    let pane_height = task_rect.height.saturating_sub(2) as usize;
+    let inner_width = task_rect.width.saturating_sub(2);
 
     let visual_line_count = if inner_width > 0 {
         Paragraph::new(task_content.clone())
@@ -374,10 +390,10 @@ fn render_main_shell(
 
     if let Some(layout) = layout {
         layout.set(Rects {
-            sidebar: chunks[0],
-            task_pane: chunks[1],
+            sidebar: sidebar_rect,
+            task_pane: task_rect,
             sidebar_item_count,
-            sidebar_offset: list_state.offset(),
+            sidebar_offset,
             task_pane_inner_width: inner_width,
             visual_line_count,
             pane_height,
@@ -390,7 +406,7 @@ fn render_main_shell(
             .block(panel(tasks_title, app.focus == FocusArea::TaskList))
             .wrap(Wrap { trim: false })
             .scroll((scroll_offset, 0)),
-        chunks[1],
+        task_rect,
     );
 
     if visual_line_count > pane_height {
@@ -399,7 +415,7 @@ fn render_main_shell(
                 .position(scroll_offset as usize);
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight),
-            chunks[1].inner(Margin {
+            task_rect.inner(Margin {
                 vertical: 1,
                 horizontal: 0,
             }),

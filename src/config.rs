@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 pub struct AppConfig {
     pub task_dir: PathBuf,
     pub editor: Option<String>,
+    pub sidebar_width: u8,
+    pub sidebar_min_width: u8,
+    pub sidebar_max_width: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +41,16 @@ impl ConfigPaths {
 }
 
 impl AppConfig {
+    pub fn new(task_dir: PathBuf) -> Self {
+        Self {
+            task_dir,
+            editor: None,
+            sidebar_width: 20,
+            sidebar_min_width: 0,
+            sidebar_max_width: 50,
+        }
+    }
+
     /// Persist the config. Writes the task directory on the first line, then
     /// any non-default settings as `key=value` pairs. Comments are not
     /// preserved — saving rewrites the file.
@@ -49,6 +62,15 @@ impl AppConfig {
             content.push_str("editor=");
             content.push_str(editor);
         }
+        content.push('\n');
+        content.push_str("sidebar_width=");
+        content.push_str(&self.sidebar_width.to_string());
+        content.push('\n');
+        content.push_str("sidebar_min_width=");
+        content.push_str(&self.sidebar_min_width.to_string());
+        content.push('\n');
+        content.push_str("sidebar_max_width=");
+        content.push_str(&self.sidebar_max_width.to_string());
         fs::write(&paths.config_file, content)
     }
 
@@ -67,6 +89,9 @@ impl AppConfig {
 
         let mut task_dir: Option<String> = None;
         let mut editor: Option<String> = None;
+        let mut sidebar_width: u8 = 20;
+        let mut sidebar_min_width: u8 = 0;
+        let mut sidebar_max_width: u8 = 50;
 
         for line in raw.lines() {
             let trimmed = line.trim_end_matches('\r');
@@ -80,6 +105,21 @@ impl AppConfig {
                         let value = value.trim();
                         if !value.is_empty() {
                             editor = Some(value.to_string());
+                        }
+                    }
+                    "sidebar_width" => {
+                        if let Ok(v) = value.trim().parse::<u8>() {
+                            sidebar_width = v.min(100);
+                        }
+                    }
+                    "sidebar_min_width" => {
+                        if let Ok(v) = value.trim().parse::<u8>() {
+                            sidebar_min_width = v.min(100);
+                        }
+                    }
+                    "sidebar_max_width" => {
+                        if let Ok(v) = value.trim().parse::<u8>() {
+                            sidebar_max_width = v.min(100);
                         }
                     }
                     _ => {} // unknown keys silently ignored
@@ -109,6 +149,9 @@ impl AppConfig {
         Ok(Self {
             task_dir: PathBuf::from(task_dir),
             editor,
+            sidebar_width,
+            sidebar_min_width,
+            sidebar_max_width,
         })
     }
 }

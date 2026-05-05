@@ -55,7 +55,7 @@ fn setup_with_spec_examples(name: &str) -> (PathBuf, TuiSession) {
     )
     .unwrap();
 
-    let session = TuiSession::open(root.clone(), "2026-03-30").unwrap();
+    let session = TuiSession::open_default(root.clone(), "2026-03-30").unwrap();
     (root, session)
 }
 
@@ -168,7 +168,7 @@ fn no_list_files_means_empty_smart_section() {
     // Intentionally do NOT create lists.d or any .list files
     fs::write(root.join("a.txt"), "Some task +Project\n").unwrap();
 
-    let session = TuiSession::open(root, "2026-03-30").unwrap();
+    let session = TuiSession::open_default(root, "2026-03-30").unwrap();
     let items = session.sidebar_items();
 
     // With no smart lists, the first item should be ProjectsHeader (no separator before it)
@@ -232,7 +232,7 @@ fn malformed_list_shows_in_sidebar_with_error() {
     )
     .unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-30").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
 
     // The bad list should still appear in the sidebar
     let items = session.sidebar_items();

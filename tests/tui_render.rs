@@ -99,7 +99,7 @@ fn main_render_shows_sidebar_labels_and_real_task_rows() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom +Family @phone\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-30").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
     // Navigate from Done (default, alphabetically first) to Inbox
     session.dispatch_key("j").unwrap();
     let text = render_text(&session);
@@ -118,7 +118,7 @@ fn session_render_preserves_search_delete_editor_and_conflict_states() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom +Family @phone\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-30").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
     session.app_mut().search_active = true;
     session.app_mut().confirm_delete = true;
     session.app_mut().editor = Some(EditorState::quick_entry());
@@ -141,7 +141,7 @@ fn session_render_shows_selected_task_and_updates_after_navigation() {
     fs::write(root.join("a.txt"), "Call Mom +Family @phone\n").unwrap();
     fs::write(root.join("b.txt"), "Ship package +Errands @town\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-30").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
@@ -165,7 +165,7 @@ fn session_render_shows_active_search_query_and_matching_rows() {
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
     fs::write(root.join("b.txt"), "Email Alex\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
     session.dispatch_key("/").unwrap();
@@ -375,7 +375,7 @@ fn session_render_shows_delete_confirmation_for_selected_task() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
     session.dispatch_key("D").unwrap();
 
@@ -542,7 +542,7 @@ fn session_render_includes_help_bar() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
-    let session = TuiSession::open(root, "2026-03-31").unwrap();
+    let session = TuiSession::open_default(root, "2026-03-31").unwrap();
     let text = render_text(&session);
 
     assert!(text.contains("add"), "help bar should contain 'add'");
@@ -615,7 +615,7 @@ fn session_render_shows_divider_lines_between_tasks() {
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
     fs::write(root.join("b.txt"), "Ship package\n").unwrap();
 
-    let session = TuiSession::open(root, "2026-03-31").unwrap();
+    let session = TuiSession::open_default(root, "2026-03-31").unwrap();
 
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -649,7 +649,7 @@ fn session_render_wraps_long_task_descriptions() {
     )
     .unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
 
@@ -664,7 +664,7 @@ fn session_render_wraps_long_task_descriptions() {
     let mut wrap_row = None;
     for row in 0..24u16 {
         let mut row_text = String::new();
-        for col in 25..80u16 {
+        for col in 0..80u16 {
             row_text.push_str(buf[(col, row)].symbol());
         }
         if row_text.contains("This is") {
@@ -698,7 +698,7 @@ fn session_render_scrolls_to_keep_selected_task_visible() {
         .unwrap();
     }
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
@@ -717,7 +717,7 @@ fn session_render_scrolls_to_keep_selected_task_visible() {
     let mut found_last = false;
     for row in 0..24u16 {
         let mut row_text = String::new();
-        for col in 25..80u16 {
+        for col in 0..80u16 {
             row_text.push_str(buf[(col, row)].symbol());
         }
         if row_text.contains("Task number 19") {
@@ -789,7 +789,7 @@ fn sidebar_scrollbar_appears_when_items_overflow() {
         .unwrap();
     }
 
-    let session = TuiSession::open(root, "2026-04-01").unwrap();
+    let session = TuiSession::open_default(root, "2026-04-01").unwrap();
 
     let backend = TestBackend::new(80, 10);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -798,9 +798,10 @@ fn sidebar_scrollbar_appears_when_items_overflow() {
         .unwrap();
 
     // The scrollbar track character "│" or thumb "█" should appear
-    // in the rightmost column of the sidebar area (column 23, inside border).
+    // in the rightmost column of the sidebar area.
     let buf = terminal.backend().buffer();
-    let sidebar_right_col = 23u16;
+    let sidebar_width = session.app().sidebar_width.get();
+    let sidebar_right_col = sidebar_width.saturating_sub(1);
     let mut found_thumb = false;
     for row in 1..9u16 {
         let symbol = buf[(sidebar_right_col, row)].symbol();
@@ -828,7 +829,7 @@ fn task_pane_scrollbar_appears_when_tasks_overflow() {
         .unwrap();
     }
 
-    let mut session = TuiSession::open(root, "2026-04-01").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-01").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
@@ -870,7 +871,7 @@ fn session_render_scroll_keeps_selected_visible_in_narrow_terminal() {
         fs::write(root.join(format!("{:02}.txt", i)), format!("{long_text}\n")).unwrap();
     }
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
@@ -891,7 +892,7 @@ fn session_render_scroll_keeps_selected_visible_in_narrow_terminal() {
     let mut found_marker = false;
     for row in 0..15u16 {
         let mut row_text = String::new();
-        for col in 25..50u16 {
+        for col in 0..50u16 {
             row_text.push_str(buf[(col, row)].symbol());
         }
         if row_text.contains(">") && row_text.contains("Task 9") {
@@ -912,7 +913,7 @@ fn sidebar_scrollbar_hidden_when_items_fit() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Only task +Proj @ctx\n").unwrap();
 
-    let session = TuiSession::open(root, "2026-04-01").unwrap();
+    let session = TuiSession::open_default(root, "2026-04-01").unwrap();
 
     // Tall terminal — sidebar items easily fit
     let backend = TestBackend::new(80, 30);
@@ -939,7 +940,7 @@ fn task_pane_scrollbar_hidden_when_tasks_fit() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Only task\n").unwrap();
 
-    let session = TuiSession::open(root, "2026-04-01").unwrap();
+    let session = TuiSession::open_default(root, "2026-04-01").unwrap();
 
     let backend = TestBackend::new(80, 30);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -971,7 +972,7 @@ fn scrollbar_thumb_reaches_bottom_when_last_task_selected() {
         .unwrap();
     }
 
-    let mut session = TuiSession::open(root, "2026-04-01").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-04-01").unwrap();
     // Navigate from Done (default) to Inbox so tasks are visible
     session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
@@ -1024,7 +1025,7 @@ fn picker_modal_renders_with_title_and_field_list() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     session.app_mut().picker = Some(PickerState::new(PickerKind::Sort));
 
     let text = render_text(&session);
@@ -1048,7 +1049,7 @@ fn task_pane_title_shows_sort_override_indicator() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     session.set_sort_override(Directive {
         field: Field::Due,
         direction: Direction::Asc,
@@ -1070,7 +1071,7 @@ fn task_pane_title_shows_group_override_indicator() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
 
-    let mut session = TuiSession::open(root, "2026-03-31").unwrap();
+    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
     session.set_group_override(Directive {
         field: Field::Priority,
         direction: Direction::Asc,

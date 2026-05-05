@@ -10,6 +10,7 @@ pub enum MouseAction {
     SelectSidebar(usize),
     ClickTaskPane { row: usize },
     Scroll { in_task_pane: bool, delta: isize },
+    ResizeStart,
 }
 
 pub fn resolve_mouse_action(
@@ -19,6 +20,11 @@ pub fn resolve_mouse_action(
     sidebar_items: &[SidebarItem],
 ) -> Option<MouseAction> {
     let pos = Position::new(col, row);
+
+    // Check resize zone first — it overlaps with both sidebar and task pane borders
+    if is_resize_zone(col, rects) && !on_border_row(row, rects) {
+        return Some(MouseAction::ResizeStart);
+    }
 
     // Check sidebar
     let sb = &rects.sidebar;
@@ -53,6 +59,22 @@ pub fn resolve_mouse_action(
     None
 }
 
+fn is_resize_zone(col: u16, rects: &Rects) -> bool {
+    let sb_width = rects.sidebar.width;
+    // Only enable resize zone when sidebar is wide enough to distinguish
+    // the border from content.
+    if sb_width < 4 {
+        return false;
+    }
+    let sb_right = sb_width.saturating_sub(1);
+    col == sb_right || col == sb_width
+}
+
+fn on_border_row(row: u16, rects: &Rects) -> bool {
+    let sb = &rects.sidebar;
+    row <= sb.y || row >= sb.y.saturating_add(sb.height).saturating_sub(1)
+}
+
 pub fn resolve_scroll_action(
     col: u16,
     row: u16,
@@ -76,6 +98,38 @@ pub fn resolve_scroll_action(
     }
 
     None
+}
+
+pub struct ResizeDrag {
+    pub active: bool,
+    start_width: u16,
+    start_col: u16,
+}
+
+impl ResizeDrag {
+    pub fn new() -> Self {
+        Self {
+            active: false,
+            start_width: 0,
+            start_col: 0,
+        }
+    }
+
+    pub fn start(&mut self, current_width: u16, col: u16) {
+        self.active = true;
+        self.start_width = current_width;
+        self.start_col = col;
+    }
+
+    pub fn stop(&mut self) {
+        self.active = false;
+    }
+
+    pub fn compute_width(&self, col: u16) -> u16 {
+        let delta = col as isize - self.start_col as isize;
+        let new = self.start_width as isize + delta;
+        new.max(0) as u16
+    }
 }
 
 pub struct DoubleClickTracker {

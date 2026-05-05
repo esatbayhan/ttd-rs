@@ -1,7 +1,9 @@
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io;
 use std::path::PathBuf;
 
+use crate::config::{AppConfig, ConfigPaths};
 use crate::parser::parse_task_line;
 use crate::query::sort_tasks;
 use crate::refresh::SnapshotIndex;
@@ -143,25 +145,41 @@ pub struct TuiSession {
     /// turn. Set by the session in response to `EditListExternally`; cleared
     /// when the main loop drains it via `take_pending_external_edit`.
     pending_external_edit: Option<PathBuf>,
+    sidebar_width_pct: u8,
+    sidebar_min_width_pct: u8,
+    sidebar_max_width_pct: u8,
+    paths: ConfigPaths,
+    last_terminal_cols: Cell<u16>,
 }
 
 impl TuiSession {
     pub fn from_launch_mode(
         launch_mode: crate::bootstrap::LaunchMode,
         today: &str,
+        paths: ConfigPaths,
     ) -> io::Result<Self> {
         match launch_mode {
-            crate::bootstrap::LaunchMode::Welcome => Ok(Self::welcome(today)),
+            crate::bootstrap::LaunchMode::Welcome => Ok(Self::welcome(today, paths)),
             crate::bootstrap::LaunchMode::Main(config) => {
                 let editor = crate::config::resolve_editor(Some(&config));
-                let mut session = Self::open(config.task_dir, today)?;
+                let sidebar_width_pct = config.sidebar_width;
+                let sidebar_min_width_pct = config.sidebar_min_width;
+                let sidebar_max_width_pct = config.sidebar_max_width;
+                let mut session = Self::open(
+                    config.task_dir,
+                    today,
+                    sidebar_width_pct,
+                    sidebar_min_width_pct,
+                    sidebar_max_width_pct,
+                    paths,
+                )?;
                 session.editor_command = editor;
                 Ok(session)
             }
         }
     }
 
-    pub fn welcome(today: &str) -> Self {
+    pub fn welcome(today: &str, paths: ConfigPaths) -> Self {
         Self {
             app: AppState::new(AppMode::Welcome),
             store: None,
@@ -182,10 +200,29 @@ impl TuiSession {
             collapsed_groups: HashSet::new(),
             editor_command: crate::config::resolve_editor(None),
             pending_external_edit: None,
+            sidebar_width_pct: 20,
+            sidebar_min_width_pct: 0,
+            sidebar_max_width_pct: 50,
+            paths,
+            last_terminal_cols: Cell::new(0),
         }
     }
 
-    pub fn open(root: PathBuf, today: &str) -> io::Result<Self> {
+    pub fn welcome_default(today: &str) -> Self {
+        Self::welcome(
+            today,
+            ConfigPaths::from_root(PathBuf::from("/tmp/ttd-welcome")),
+        )
+    }
+
+    pub fn open(
+        root: PathBuf,
+        today: &str,
+        sidebar_width_pct: u8,
+        sidebar_min_width_pct: u8,
+        sidebar_max_width_pct: u8,
+        paths: ConfigPaths,
+    ) -> io::Result<Self> {
         let store = TaskStore::open(root)?;
         let snapshot = store.load_all()?;
         let fs_index = Some(store.snapshot_index()?);
@@ -208,9 +245,19 @@ impl TuiSession {
             collapsed_groups: HashSet::new(),
             editor_command: crate::config::resolve_editor(None),
             pending_external_edit: None,
+            sidebar_width_pct,
+            sidebar_min_width_pct,
+            sidebar_max_width_pct,
+            paths,
+            last_terminal_cols: Cell::new(0),
         };
         session.rebuild();
         Ok(session)
+    }
+
+    pub fn open_default(root: PathBuf, today: &str) -> io::Result<Self> {
+        let root_clone = root.clone();
+        Self::open(root, today, 20, 0, 50, ConfigPaths::from_root(root_clone))
     }
 
     pub fn sidebar_items(&self) -> &[SidebarItem] {
@@ -250,6 +297,59 @@ impl TuiSession {
 
     pub fn view_overrides(&self) -> &ViewOverrides {
         &self.view_overrides
+    }
+
+    pub fn init_sidebar_width(&self, terminal_cols: u16) {
+        let pct = self.sidebar_width_pct as u32;
+        let min_pct = self.sidebar_min_width_pct as u32;
+        let max_pct = self.sidebar_max_width_pct as u32;
+        let cols = terminal_cols as u32;
+        let min = (cols * min_pct / 100) as u16;
+        let max = (cols * max_pct / 100) as u16;
+        let width = (cols * pct / 100) as u16;
+        self.app.sidebar_width.set(width.clamp(min, max.max(1)));
+    }
+
+    pub fn apply_sidebar_width(&self, width: u16, terminal_cols: u16) {
+        let min_pct = self.sidebar_min_width_pct as u32;
+        let max_pct = self.sidebar_max_width_pct as u32;
+        let cols = terminal_cols as u32;
+        let min = (cols * min_pct / 100) as u16;
+        let max = (cols * max_pct / 100) as u16;
+        self.app.sidebar_width.set(width.clamp(min, max.max(1)));
+    }
+
+    pub fn save_sidebar_config(&self) -> io::Result<()> {
+        let task_dir = self
+            .store
+            .as_ref()
+            .map(|s| s.root_dir().to_path_buf())
+            .unwrap_or_default();
+        let pct = if let Ok((cols, _)) = crossterm::terminal::size() {
+            if cols > 0 {
+                ((self.app.sidebar_width.get() as u32 * 100) / cols as u32) as u8
+            } else {
+                self.sidebar_width_pct
+            }
+        } else {
+            self.sidebar_width_pct
+        };
+        let config = AppConfig {
+            task_dir,
+            editor: Some(self.editor_command.clone()),
+            sidebar_width: pct,
+            sidebar_min_width: self.sidebar_min_width_pct,
+            sidebar_max_width: self.sidebar_max_width_pct,
+        };
+        config.save(&self.paths)
+    }
+
+    pub fn maybe_handle_resize(&self, terminal_cols: u16) {
+        let last = self.last_terminal_cols.get();
+        if terminal_cols != last {
+            self.init_sidebar_width(terminal_cols);
+            self.last_terminal_cols.set(terminal_cols);
+        }
     }
 
     pub fn collapsed_groups(&self) -> &HashSet<Vec<String>> {
@@ -568,9 +668,19 @@ impl TuiSession {
                 crate::config::AppConfig {
                     task_dir: task_dir.clone(),
                     editor: None,
+                    sidebar_width: self.sidebar_width_pct,
+                    sidebar_min_width: self.sidebar_min_width_pct,
+                    sidebar_max_width: self.sidebar_max_width_pct,
                 }
                 .save(paths)?;
-                *self = Self::open(task_dir, &self.today)?;
+                *self = Self::open(
+                    task_dir,
+                    &self.today,
+                    self.sidebar_width_pct,
+                    self.sidebar_min_width_pct,
+                    self.sidebar_max_width_pct,
+                    self.paths.clone(),
+                )?;
             }
             AppAction::MoveDown => self.move_selection(1),
             AppAction::MoveUp => self.move_selection(-1),
@@ -873,6 +983,32 @@ impl TuiSession {
                 }
             }
             AppAction::CloseListViewer => {}
+            AppAction::ToggleSidebar => {
+                if self.app.sidebar_width.get() == 0 {
+                    if let Ok((cols, _)) = crossterm::terminal::size() {
+                        let pct = self.sidebar_width_pct as u32;
+                        let width = ((cols as u32 * pct) / 100) as u16;
+                        self.apply_sidebar_width(width.max(1), cols);
+                    }
+                } else {
+                    self.app.sidebar_width.set(0);
+                }
+                if self.app.sidebar_width.get() == 0 && self.app.focus == FocusArea::Sidebar {
+                    self.app.focus = FocusArea::TaskList;
+                }
+                let _ = self.save_sidebar_config();
+            }
+            AppAction::ResizeSidebar(delta) => {
+                if let Ok((cols, _)) = crossterm::terminal::size() {
+                    let current = self.app.sidebar_width.get() as isize;
+                    let new = (current + delta).max(0);
+                    self.apply_sidebar_width(new as u16, cols);
+                }
+                if self.app.sidebar_width.get() == 0 && self.app.focus == FocusArea::Sidebar {
+                    self.app.focus = FocusArea::TaskList;
+                }
+                let _ = self.save_sidebar_config();
+            }
             AppAction::EditListExternally => {
                 let path = self
                     .app

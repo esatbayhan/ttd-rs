@@ -19,9 +19,9 @@ use ttd::bootstrap::LaunchMode;
 use ttd::cli::{Cli, Command};
 use ttd::config::ConfigPaths;
 use ttd::store::TaskStore;
-use ttd::tui::app::{AppMode, AppState};
+use ttd::tui::app::{AppMode, AppState, FocusArea};
 use ttd::tui::mouse::{
-    DoubleClickTracker, MouseAction, resolve_mouse_action, resolve_scroll_action,
+    DoubleClickTracker, MouseAction, ResizeDrag, resolve_mouse_action, resolve_scroll_action,
 };
 use ttd::tui::render::{LayoutRects, render_session_frame, render_session_frame_with_layout};
 use ttd::tui::session::TuiSession;
@@ -73,16 +73,19 @@ fn run_tui(cli_task_dir: Option<PathBuf>) -> io::Result<()> {
         Some(task_dir) => LaunchMode::Main(ttd::config::AppConfig {
             task_dir,
             editor: None,
+            sidebar_width: 20,
+            sidebar_min_width: 0,
+            sidebar_max_width: 50,
         }),
         None => LaunchMode::from_disk(&paths)?,
     };
     let today = today_date()?;
 
     if env::var_os("TTD_TUI_RENDER_ONCE").is_some() {
-        let session = TuiSession::from_launch_mode(launch_mode, &today)?;
+        let session = TuiSession::from_launch_mode(launch_mode, &today, paths.clone())?;
         render_tui_once_to_stdout(&session)
     } else {
-        let session = TuiSession::from_launch_mode(launch_mode, &today)?;
+        let session = TuiSession::from_launch_mode(launch_mode, &today, paths.clone())?;
         run_live_tui(session, &paths)
     }
 }
@@ -163,6 +166,7 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
     let mut key_buffer = LiveKeyBuffer::new();
     let layout = LayoutRects::default();
     let mut double_click = DoubleClickTracker::new();
+    let mut resize_drag = ResizeDrag::new();
     let result = (|| -> io::Result<()> {
         loop {
             terminal.draw(|frame| render_session_frame_with_layout(frame, &session, &layout))?;
@@ -189,6 +193,12 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                                         session.sidebar_items(),
                                     ) {
                                         match action {
+                                            MouseAction::ResizeStart => {
+                                                resize_drag.start(
+                                                    session.app().sidebar_width.get(),
+                                                    mouse.column,
+                                                );
+                                            }
                                             MouseAction::SelectSidebar(index) => {
                                                 session.dispatch_mouse_sidebar(index);
                                             }
@@ -209,6 +219,24 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                                             }
                                             MouseAction::Scroll { .. } => {}
                                         }
+                                    }
+                                }
+                                MouseEventKind::Drag(MouseButton::Left) => {
+                                    if resize_drag.active {
+                                        let new_width = resize_drag.compute_width(mouse.column);
+                                        let (cols, _) = crossterm::terminal::size()?;
+                                        session.apply_sidebar_width(new_width, cols);
+                                        if new_width == 0
+                                            && session.app().focus == FocusArea::Sidebar
+                                        {
+                                            session.app_mut().focus = FocusArea::TaskList;
+                                        }
+                                    }
+                                }
+                                MouseEventKind::Up(MouseButton::Left) => {
+                                    if resize_drag.active {
+                                        resize_drag.stop();
+                                        let _ = session.save_sidebar_config();
                                     }
                                 }
                                 MouseEventKind::ScrollUp => {
@@ -413,8 +441,20 @@ fn key_token_from_event(event: &Event) -> Option<String> {
         KeyCode::Enter => Some("enter".into()),
         KeyCode::Tab => Some("tab".into()),
         KeyCode::Esc => Some("esc".into()),
-        KeyCode::Left => Some("left".into()),
-        KeyCode::Right => Some("right".into()),
+        KeyCode::Left => {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                Some("ctrl+left".into())
+            } else {
+                Some("left".into())
+            }
+        }
+        KeyCode::Right => {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                Some("ctrl+right".into())
+            } else {
+                Some("right".into())
+            }
+        }
         KeyCode::Up => Some("up".into()),
         KeyCode::Down => Some("down".into()),
         KeyCode::Home => Some("home".into()),
@@ -472,7 +512,7 @@ mod tests {
         let root = temp_path("welcome-submit");
         let paths = ConfigPaths::from_root(root.join("config"));
         let task_dir = root.join("todo.txt.d");
-        let mut session = TuiSession::welcome("2026-03-30");
+        let mut session = TuiSession::welcome_default("2026-03-30");
 
         for key in task_dir.display().to_string().chars() {
             session
@@ -483,10 +523,9 @@ mod tests {
 
         assert_eq!(session.app().mode, ttd::tui::app::AppMode::Main);
         assert!(session.app().welcome_input.is_empty());
-        assert_eq!(
-            fs::read_to_string(&paths.config_file).unwrap(),
-            task_dir.display().to_string()
-        );
+        let config_content = fs::read_to_string(&paths.config_file).unwrap();
+        assert!(config_content.starts_with(&task_dir.display().to_string()));
+        assert!(config_content.contains("sidebar_width="));
         assert!(task_dir.join("done.txt.d").is_dir());
     }
 

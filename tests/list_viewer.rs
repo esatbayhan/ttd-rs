@@ -27,7 +27,7 @@ fn write_inbox_list(root: &std::path::Path, body: &str) -> PathBuf {
 
 fn open_session(root: PathBuf) -> TuiSession {
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
-    TuiSession::open(root, "2026-04-25").unwrap()
+    TuiSession::open_default(root, "2026-04-25").unwrap()
 }
 
 // ─── Editor resolution ────────────────────────────────────────────────────────
@@ -37,6 +37,7 @@ fn resolve_editor_prefers_config_over_env() {
     let cfg = AppConfig {
         task_dir: PathBuf::from("/tmp/x"),
         editor: Some("nvim".to_string()),
+        ..AppConfig::new(PathBuf::from("/tmp/x"))
     };
     // SAFETY: env var mutation in tests; isolated to this single-threaded test.
     unsafe {
@@ -55,6 +56,7 @@ fn resolve_editor_falls_back_to_visual_then_editor() {
     let cfg = AppConfig {
         task_dir: PathBuf::from("/tmp/x"),
         editor: None,
+        ..AppConfig::new(PathBuf::from("/tmp/x"))
     };
     unsafe {
         std::env::set_var("VISUAL", "vim-from-visual");
@@ -77,6 +79,7 @@ fn resolve_editor_uses_platform_default_when_nothing_set() {
     let cfg = AppConfig {
         task_dir: PathBuf::from("/tmp/x"),
         editor: None,
+        ..AppConfig::new(PathBuf::from("/tmp/x"))
     };
     unsafe {
         std::env::remove_var("VISUAL");
@@ -96,6 +99,7 @@ fn config_round_trip_preserves_editor_field() {
     let original = AppConfig {
         task_dir: root.join("todo.txt.d"),
         editor: Some("code -w".to_string()),
+        ..AppConfig::new(root.join("todo.txt.d"))
     };
     original.save(&paths).unwrap();
     let loaded = AppConfig::load(&paths).unwrap();

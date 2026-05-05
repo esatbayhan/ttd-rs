@@ -5,6 +5,7 @@ use super::editor::{
 use super::events::normalize_key;
 use super::render::EDITOR_MODAL_WIDTH;
 use crate::smartlist::Field;
+use std::cell::Cell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickerKind {
@@ -105,6 +106,8 @@ pub enum AppAction {
     CloseListViewer,
     ScrollListViewer(isize),
     EditListExternally,
+    ToggleSidebar,
+    ResizeSidebar(isize),
 }
 
 pub struct AppState {
@@ -120,6 +123,7 @@ pub struct AppState {
     pub should_quit: bool,
     pub picker: Option<PickerState>,
     pub list_viewer: Option<ListViewerState>,
+    pub sidebar_width: Cell<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,6 +166,7 @@ impl AppState {
             should_quit: false,
             picker: None,
             list_viewer: None,
+            sidebar_width: Cell::new(24),
         }
     }
 
@@ -255,17 +260,26 @@ impl AppState {
                 Some(AppAction::Quit)
             }
             "tab" => {
-                self.focus = toggle_focus(self.focus);
+                if self.sidebar_width.get() > 0 {
+                    self.focus = toggle_focus(self.focus);
+                }
                 Some(AppAction::FocusNext)
             }
             "h" | "left" => {
-                self.focus = toggle_focus(self.focus);
+                if self.sidebar_width.get() > 0 {
+                    self.focus = toggle_focus(self.focus);
+                }
                 Some(AppAction::FocusPrev)
             }
             "l" | "right" => {
-                self.focus = toggle_focus(self.focus);
+                if self.sidebar_width.get() > 0 {
+                    self.focus = toggle_focus(self.focus);
+                }
                 Some(AppAction::FocusNext)
             }
+            "ctrl+left" | "ctrl+h" => Some(AppAction::ResizeSidebar(-2)),
+            "ctrl+right" | "ctrl+l" => Some(AppAction::ResizeSidebar(2)),
+            "ctrl+b" => Some(AppAction::ToggleSidebar),
             "/" => {
                 self.search_active = true;
                 self.search_query.clear();

@@ -73,6 +73,10 @@ impl TaskStore {
         Ok(Self { root })
     }
 
+    pub fn root_dir(&self) -> &Path {
+        &self.root
+    }
+
     pub fn snapshot_index(&self) -> io::Result<SnapshotIndex> {
         let root_index = SnapshotIndex::scan(&self.root)?;
         let done_index = SnapshotIndex::scan(&self.done_dir())?;

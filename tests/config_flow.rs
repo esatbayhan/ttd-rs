@@ -40,6 +40,7 @@ fn persisted_config_loads_main_mode() {
     AppConfig {
         task_dir: root.join("todo.txt.d"),
         editor: None,
+        ..AppConfig::new(root.join("todo.txt.d"))
     }
     .save(&paths)
     .unwrap();
@@ -65,6 +66,9 @@ fn invalid_config_falls_back_to_welcome_mode() {
     AppConfig {
         task_dir: task_file,
         editor: None,
+        sidebar_width: 20,
+        sidebar_min_width: 0,
+        sidebar_max_width: 50,
     }
     .save(&paths)
     .unwrap();
@@ -204,6 +208,9 @@ fn operational_validation_error_is_returned() {
     AppConfig {
         task_dir: locked_parent.join("todo.txt.d"),
         editor: None,
+        sidebar_width: 20,
+        sidebar_min_width: 0,
+        sidebar_max_width: 50,
     }
     .save(&paths)
     .unwrap();
