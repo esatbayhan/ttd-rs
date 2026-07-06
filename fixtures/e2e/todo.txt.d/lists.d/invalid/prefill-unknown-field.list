@@ -1,0 +1,8 @@
+---
+name: Bad Prefill Field
+description: Lenient parsing — `prefill foo bar` has an unknown field and is ignored; remaining prefills apply
+---
+not done
+
+prefill foo bar
+prefill project Work

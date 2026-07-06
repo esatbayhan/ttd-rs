@@ -1,0 +1,7 @@
+---
+name: Not Test
+icon: 🚫
+description: Tasks where neither project nor description includes the word Test (excludes operator coverage)
+---
+project excludes Test
+description excludes Test

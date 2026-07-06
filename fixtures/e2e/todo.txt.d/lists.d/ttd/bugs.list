@@ -1,0 +1,13 @@
+---
+name: Bugs
+icon: 🐞
+description: Bugs filed against +ttd; new tasks default to +ttd @bug
+---
+project includes {{dir}}
+context includes bug
+not done
+
+sort by creation_date desc
+
+prefill project {{dir}}
+prefill context bug

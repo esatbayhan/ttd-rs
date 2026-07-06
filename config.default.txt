@@ -1,0 +1,12 @@
+# ttd default configuration
+# Copy this to ~/.config/ttd/config.txt or $XDG_CONFIG_HOME/ttd/config.txt
+#
+# The first line is the path to your todo.txt.d directory.
+# Subsequent lines are key=value settings.
+#
+# Key:   Description (default)
+# ─────────────────────────────
+# editor           Command for external editor, e.g. "nvim" or "code -w"
+# sidebar_width    Sidebar width as % of terminal columns (20)
+# sidebar_min_width  Minimum sidebar width as % of terminal columns (0)
+# sidebar_max_width  Maximum sidebar width as % of terminal columns (50)

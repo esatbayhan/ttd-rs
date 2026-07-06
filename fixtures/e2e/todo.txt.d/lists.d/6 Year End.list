@@ -1,0 +1,10 @@
+---
+name: Year End
+icon: 🎯
+description: Tasks due before end of 2026; new tasks default to Dec 28 2026
+---
+due <= 2026-12-31
+
+sort by due asc
+
+prefill due 2026-12-31-3

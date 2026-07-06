@@ -1,0 +1,12 @@
+---
+name: Today
+icon: 📅
+description: Tasks due or scheduled for today, sorted by priority
+---
+due = today
+
+OR
+
+scheduled = today
+
+sort by priority asc

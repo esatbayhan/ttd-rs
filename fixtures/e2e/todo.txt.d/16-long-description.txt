@@ -1,0 +1,1 @@
+Detailed task description that goes on for a while to test how the TUI wraps long lines and ensures the editor and renderer behave correctly when content exceeds a single visible row +Work @meeting due:2026-05-30

@@ -1,0 +1,12 @@
+---
+name: Work Inbox
+icon: 🏢
+description: Work tasks needing triage; new tasks default to +Work and @office
+---
+project includes Work
+no priority
+
+sort by creation_date asc
+
+prefill project Work
+prefill context office

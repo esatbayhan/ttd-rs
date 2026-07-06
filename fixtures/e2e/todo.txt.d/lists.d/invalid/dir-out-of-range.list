@@ -1,0 +1,7 @@
+---
+name: Out Of Range
+description: {{dir:5}} escapes beyond lists.d, so the entire list is invalid and silently ignored
+---
+project includes {{dir:5}}
+
+sort by priority desc

@@ -1,0 +1,9 @@
+---
+name: With Unknown Filter
+icon: ⚠️
+description: Unrecognized filter line is silently skipped; valid lines still apply
+---
+foobar baz quux
+due <= today
+
+sort by due asc
