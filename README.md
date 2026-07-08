@@ -17,6 +17,12 @@ It stores tasks as plain text, keeps open and completed items in a
 - **Temporary sort and group**: overlay pickers to sort/group by any field without editing list files
 - **Vim-style navigation**: `j`/`k`, `h`/`l`, `gg`/`G` keybindings
 
+## Screenshots
+
+![TUI main view](docs/screenshots/tui-main.png)
+![TUI navigation](docs/screenshots/tui-navigate.gif)
+![Task editor](docs/screenshots/tui-editor.png)
+
 ## Build and install
 
 Requirements:
@@ -163,6 +169,10 @@ cargo test
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
+
+### Screenshots
+
+See [scripts/README.md](scripts/README.md) for the workflow.
 
 ## License
 

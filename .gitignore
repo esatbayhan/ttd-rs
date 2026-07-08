@@ -1,6 +1,9 @@
 # Rust build output
 /target/
 
+# Demo artifacts (generated)
+/demo-data/
+
 # Tools
 .claude/
 docs/superpowers/
