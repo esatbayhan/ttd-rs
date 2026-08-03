@@ -72,6 +72,19 @@ fn inbox_list_matches_tasks_without_dates() {
 }
 
 #[test]
+fn no_time_requires_an_existing_date_only_field() {
+    let list = make_list("no time due\n");
+    let tasks = vec![
+        stored("Missing"),
+        stored("Date only due:2026-04-03"),
+        stored("Timed due:2026-04-03T09:00"),
+    ];
+    let result = evaluate(&list, &tasks, "2026-04-03");
+    assert_eq!(result.len(), 1);
+    assert!(result[0].task.description.contains("Date only"));
+}
+
+#[test]
 fn priority_above_filters_correctly() {
     // priority above C → only A and B match
     let list = make_list("priority above C\n");
@@ -187,6 +200,16 @@ fn date_offset_arithmetic_works() {
 }
 
 #[test]
+fn unresolvable_extreme_date_comparison_does_not_match() {
+    let list = make_list("due <= today + 2147483647\n");
+    let tasks = vec![stored("Task due:2026-04-03")];
+
+    let result = evaluate(&list, &tasks, "2026-04-03");
+
+    assert!(result.is_empty());
+}
+
+#[test]
 fn absolute_date_anchor_with_offset() {
     // due <= 2026-12-31 - 3 → tasks due on or before Dec 28 2026
     let list = make_list("due <= 2026-12-31 - 3\n");
@@ -268,6 +291,58 @@ fn group_by_due_creates_date_groups() {
     assert_eq!(labels, vec!["Due: 2026-04-03", "Due: 2026-04-10"]);
     assert_eq!(groups[0].tasks.len(), 2);
     assert_eq!(groups[1].tasks.len(), 1);
+}
+
+#[test]
+fn date_group_orders_date_only_before_times() {
+    let list = make_list("group by due asc\n");
+    let tasks = vec![
+        stored("Late due:2026-04-03T09:00"),
+        stored("Date only due:2026-04-03"),
+        stored("Early due:2026-04-03T08:00"),
+    ];
+
+    let groups = group(&list, &tasks);
+    let descriptions: Vec<_> = groups[0]
+        .tasks
+        .iter()
+        .map(|task| task.task.description.as_str())
+        .collect();
+
+    assert_eq!(
+        descriptions,
+        [
+            "Date only due:2026-04-03",
+            "Early due:2026-04-03T08:00",
+            "Late due:2026-04-03T09:00",
+        ]
+    );
+}
+
+#[test]
+fn descending_date_group_orders_times_before_date_only() {
+    let list = make_list("group by due desc\n");
+    let tasks = vec![
+        stored("Early due:2026-04-03T08:00"),
+        stored("Date only due:2026-04-03"),
+        stored("Late due:2026-04-03T09:00"),
+    ];
+
+    let groups = group(&list, &tasks);
+    let descriptions: Vec<_> = groups[0]
+        .tasks
+        .iter()
+        .map(|task| task.task.description.as_str())
+        .collect();
+
+    assert_eq!(
+        descriptions,
+        [
+            "Late due:2026-04-03T09:00",
+            "Early due:2026-04-03T08:00",
+            "Date only due:2026-04-03",
+        ]
+    );
 }
 
 #[test]

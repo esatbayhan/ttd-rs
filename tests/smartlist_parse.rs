@@ -8,6 +8,7 @@ fn today_offset(offset: i32) -> DateValue {
     DateValue {
         anchor: DateAnchor::Today,
         offset,
+        time: None,
     }
 }
 
@@ -527,6 +528,7 @@ fn parses_absolute_date_anchor() {
             value: DateValue {
                 anchor: DateAnchor::Date("2026-12-31".to_string()),
                 offset: 0,
+                time: None,
             },
         }
     );
@@ -545,9 +547,26 @@ fn parses_absolute_date_with_offset() {
             value: DateValue {
                 anchor: DateAnchor::Date("2026-06-01".to_string()),
                 offset: -3,
+                time: None,
             },
         }
     );
+}
+
+#[test]
+fn malformed_unicode_date_value_is_ignored_without_panicking() {
+    let content = make_content("name: Invalid\n", "due <= €€€€\n");
+    let list = parse_list(&content, path("lists.d/invalid.list"), lists_dir());
+
+    assert!(list.blocks.is_empty());
+}
+
+#[test]
+fn out_of_range_time_date_value_is_ignored() {
+    let content = make_content("name: Invalid\n", "due <= 2026-04-03T24:00\n");
+    let list = parse_list(&content, path("lists.d/invalid.list"), lists_dir());
+
+    assert!(list.blocks.is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -622,6 +641,23 @@ fn prefill_absolute_date_with_offset() {
         Some(DateValue {
             anchor: DateAnchor::Date("2026-06-01".to_string()),
             offset: -3,
+            time: None,
+        })
+    );
+}
+
+#[test]
+fn prefill_relative_date_with_offset_and_time() {
+    let body = "not done\n\nprefill due today + 3 T10:00\n";
+    let content = make_content("name: Timed\n", body);
+    let list = parse_list(&content, path("lists.d/timed.list"), lists_dir());
+
+    assert_eq!(
+        list.prefill.due,
+        Some(DateValue {
+            anchor: DateAnchor::Today,
+            offset: 3,
+            time: Some("10:00".to_string()),
         })
     );
 }

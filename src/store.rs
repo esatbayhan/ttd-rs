@@ -218,7 +218,7 @@ impl TaskStore {
         fs::remove_file(path)
     }
 
-    fn done_dir(&self) -> PathBuf {
+    pub fn done_dir(&self) -> PathBuf {
         self.root.join(DONE_DIR)
     }
 
@@ -581,7 +581,7 @@ fn format_done_line(raw: &str, completion_date: &str) -> io::Result<String> {
     if !is_date_token(completion_date) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "completion date must use YYYY-MM-DD format",
+            "completion date must use YYYY-MM-DD[THH:MM] format",
         ));
     }
 

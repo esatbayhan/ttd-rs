@@ -6,6 +6,7 @@
 
 # Tools
 .claude/
+.opencode/node_modules/
 docs/superpowers/
 .superpowers/
 .worktrees

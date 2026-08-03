@@ -100,17 +100,20 @@ fn consume_priority(raw: &str) -> Option<(char, usize)> {
 }
 
 fn consume_date(raw: &str, start: usize) -> Option<(&str, usize)> {
-    let candidate = raw.get(start..start + 10)?;
-    if !is_date(candidate) {
+    let date_len = if raw.get(start..start + 16).is_some_and(is_date) {
+        16
+    } else if raw.get(start..start + 10).is_some_and(is_date) {
+        10
+    } else {
         return None;
+    };
+
+    if raw.len() == start + date_len {
+        return Some((&raw[start..start + date_len], start + date_len));
     }
 
-    if raw.len() == start + 10 {
-        return Some((candidate, start + 10));
-    }
-
-    if raw.as_bytes().get(start + 10) == Some(&b' ') {
-        return Some((candidate, start + 11));
+    if raw.as_bytes().get(start + date_len) == Some(&b' ') {
+        return Some((&raw[start..start + date_len], start + date_len + 1));
     }
 
     None
@@ -167,7 +170,7 @@ fn find_token_end(description: &str, start: usize) -> usize {
 
 fn split_tag_token(token: &str) -> Option<(&str, &str)> {
     let (key, value) = token.split_once(':')?;
-    if key.is_empty() || value.is_empty() || key.contains(':') || value.contains(':') {
+    if key.is_empty() || value.is_empty() || key.contains(':') {
         return None;
     }
 
@@ -183,9 +186,47 @@ fn tag_value_is_valid(key: &str, value: &str) -> bool {
 }
 
 pub fn is_date(token: &str) -> bool {
-    token.len() == 10
-        && token.chars().enumerate().all(|(index, value)| match index {
-            4 | 7 => value == '-',
-            _ => value.is_ascii_digit(),
+    let bytes = token.as_bytes();
+    if bytes.len() < 10 {
+        return false;
+    }
+
+    if !bytes[..10]
+        .iter()
+        .enumerate()
+        .all(|(index, byte)| match index {
+            4 | 7 => *byte == b'-',
+            _ => byte.is_ascii_digit(),
         })
+    {
+        return false;
+    }
+
+    if token.len() == 10 {
+        return true;
+    }
+
+    is_valid_time(&token[10..])
+}
+
+pub fn is_valid_time(time: &str) -> bool {
+    let bytes = time.as_bytes();
+    if bytes.len() != 6
+        || bytes[0] != b'T'
+        || !bytes[1].is_ascii_digit()
+        || !bytes[2].is_ascii_digit()
+        || bytes[3] != b':'
+        || !bytes[4].is_ascii_digit()
+        || !bytes[5].is_ascii_digit()
+    {
+        return false;
+    }
+
+    let hour = (bytes[1] - b'0') * 10 + bytes[2] - b'0';
+    let minute = (bytes[4] - b'0') * 10 + bytes[5] - b'0';
+    hour <= 23 && minute <= 59
+}
+
+pub fn display_date(raw: &str) -> String {
+    raw.replace('T', " ")
 }

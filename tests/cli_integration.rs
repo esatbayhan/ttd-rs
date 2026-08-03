@@ -124,8 +124,8 @@ fn running_without_a_subcommand_enters_main_mode_when_config_exists() {
     .unwrap();
     fs::create_dir_all(config_home.join("ttd")).unwrap();
     fs::write(
-        config_home.join("ttd/config.txt"),
-        format!("{}\n", task_dir.display()),
+        config_home.join("ttd/config.conf"),
+        format!("task_dir={}\n", task_dir.display()),
     )
     .unwrap();
 
@@ -167,8 +167,8 @@ fn tui_honors_task_dir_flag_overriding_persisted_config() {
 
     fs::create_dir_all(config_home.join("ttd")).unwrap();
     fs::write(
-        config_home.join("ttd/config.txt"),
-        format!("{}\n", unused_dir.display()),
+        config_home.join("ttd/config.conf"),
+        format!("task_dir={}\n", unused_dir.display()),
     )
     .unwrap();
 

@@ -58,7 +58,11 @@ impl Cli {
                     std::process::exit(0);
                 }
                 "--version" | "-V" => {
-                    println!("ttd {}", env!("CARGO_PKG_VERSION"));
+                    println!(
+                        "ttd {} (spec {})",
+                        env!("CARGO_PKG_VERSION"),
+                        crate::SPEC_VERSION
+                    );
                     std::process::exit(0);
                 }
                 other => return Err(format!("unknown option or command: {other}")),

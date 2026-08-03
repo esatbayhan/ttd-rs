@@ -69,6 +69,9 @@ fn invalid_config_falls_back_to_welcome_mode() {
         sidebar_width: 20,
         sidebar_min_width: 0,
         sidebar_max_width: 50,
+        show_help_bar: true,
+        auto_update_on_edit: false,
+        ..AppConfig::new(PathBuf::new())
     }
     .save(&paths)
     .unwrap();
@@ -211,6 +214,9 @@ fn operational_validation_error_is_returned() {
         sidebar_width: 20,
         sidebar_min_width: 0,
         sidebar_max_width: 50,
+        show_help_bar: true,
+        auto_update_on_edit: false,
+        ..AppConfig::new(PathBuf::new())
     }
     .save(&paths)
     .unwrap();

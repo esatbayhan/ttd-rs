@@ -4,33 +4,36 @@ use crate::task::Task;
 
 // -- Date arithmetic ----------------------------------------------------------
 
-fn julian_day(year: i32, month: u32, day: u32) -> i32 {
-    let a = (14 - month as i32) / 12;
-    let y = year + 4800 - a;
-    let m = month as i32 + 12 * a - 3;
-    day as i32 + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045
+fn julian_day(year: i32, month: u32, day: u32) -> i64 {
+    let a = (14 - i64::from(month)) / 12;
+    let y = i64::from(year) + 4800 - a;
+    let m = i64::from(month) + 12 * a - 3;
+    i64::from(day) + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045
 }
 
-fn from_julian_day(jdn: i32) -> (i32, u32, u32) {
+fn from_julian_day(jdn: i64) -> Option<(i32, u32, u32)> {
     let a = jdn + 32044;
     let b = (4 * a + 3) / 146097;
     let c = a - (146097 * b) / 4;
     let d = (4 * c + 3) / 1461;
     let e = c - (1461 * d) / 4;
     let m = (5 * e + 2) / 153;
-    let day = (e - (153 * m + 2) / 5 + 1) as u32;
-    let month = (m + 3 - 12 * (m / 10)) as u32;
+    let day = e - (153 * m + 2) / 5 + 1;
+    let month = m + 3 - 12 * (m / 10);
     let year = 100 * b + d - 4800 + m / 10;
-    (year, month, day)
+    if !(0..=9999).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    Some((year as i32, month as u32, day as u32))
 }
 
-pub fn add_days_to_date(date_str: &str, days: i32) -> String {
-    let year: i32 = date_str[0..4].parse().unwrap_or(0);
-    let month: u32 = date_str[5..7].parse().unwrap_or(1);
-    let day: u32 = date_str[8..10].parse().unwrap_or(1);
-    let jdn = julian_day(year, month, day) + days;
-    let (y, mo, d) = from_julian_day(jdn);
-    format!("{:04}-{:02}-{:02}", y, mo, d)
+pub fn add_days_to_date(date_str: &str, days: i32) -> Option<String> {
+    let year: i32 = date_str.get(0..4)?.parse().ok()?;
+    let month: u32 = date_str.get(5..7)?.parse().ok()?;
+    let day: u32 = date_str.get(8..10)?.parse().ok()?;
+    let jdn = julian_day(year, month, day).checked_add(i64::from(days))?;
+    let (y, mo, d) = from_julian_day(jdn)?;
+    Some(format!("{:04}-{:02}-{:02}", y, mo, d))
 }
 
 // -- Condition evaluation -----------------------------------------------------
@@ -45,13 +48,27 @@ fn get_date_field_value<'a>(task: &'a Task, field: &DateField) -> Option<&'a str
     }
 }
 
-/// Resolve a smart-list `DateValue` to a concrete `YYYY-MM-DD` string given today's date.
-pub fn resolve_date_value(value: &DateValue, today: &str) -> String {
+/// Resolve a smart-list `DateValue` to a concrete date/time string given today's date.
+pub fn resolve_date_value(value: &DateValue, today: &str) -> Option<String> {
     let anchor = match &value.anchor {
         DateAnchor::Today => today,
         DateAnchor::Date(d) => d.as_str(),
     };
-    add_days_to_date(anchor, value.offset)
+    let mut result = add_days_to_date(anchor, value.offset)?;
+    if let Some(time) = &value.time {
+        result.push('T');
+        result.push_str(time);
+    }
+    Some(result)
+}
+
+/// Extract just the date portion (YYYY-MM-DD) from a date value that may include time.
+fn date_portion(value: &str) -> &str {
+    if value.len() >= 10 {
+        &value[..10]
+    } else {
+        value
+    }
 }
 
 fn eval_condition(cond: &Condition, task: &Task, today: &str) -> bool {
@@ -74,18 +91,49 @@ fn eval_condition(cond: &Condition, task: &Task, today: &str) -> bool {
             has == *present
         }
 
+        Condition::TimeExistence { field, present } => {
+            let has = match field {
+                DateField::Due => task.tags.get("due").map(|s| s.len() > 10),
+                DateField::Scheduled => task.tags.get("scheduled").map(|s| s.len() > 10),
+                DateField::Starting => task.tags.get("starting").map(|s| s.len() > 10),
+                DateField::Updated => task.tags.get("updated").map(|s| s.len() > 10),
+                DateField::CreationDate => task.creation_date.as_ref().map(|s| s.len() > 10),
+            };
+            has.is_some_and(|has_time| has_time == *present)
+        }
+
         Condition::DateComparison { field, op, value } => {
             let task_date = match get_date_field_value(task, field) {
                 Some(d) => d,
                 None => return false,
             };
-            let target = resolve_date_value(value, today);
-            match op {
-                CompareOp::Eq => task_date == target,
-                CompareOp::Lt => task_date < target.as_str(),
-                CompareOp::Lte => task_date <= target.as_str(),
-                CompareOp::Gt => task_date > target.as_str(),
-                CompareOp::Gte => task_date >= target.as_str(),
+            let Some(target) = resolve_date_value(value, today) else {
+                return false;
+            };
+
+            if value.time.is_some() {
+                let task_date_padded = if task_date.len() == 10 {
+                    format!("{task_date}T00:00")
+                } else {
+                    task_date.to_string()
+                };
+                match op {
+                    CompareOp::Eq => task_date_padded == target,
+                    CompareOp::Lt => task_date_padded < target,
+                    CompareOp::Lte => task_date_padded <= target,
+                    CompareOp::Gt => task_date_padded > target,
+                    CompareOp::Gte => task_date_padded >= target,
+                }
+            } else {
+                let task_date_portion = date_portion(task_date);
+                let target_portion = date_portion(&target);
+                match op {
+                    CompareOp::Eq => task_date_portion == target_portion,
+                    CompareOp::Lt => task_date_portion < target_portion,
+                    CompareOp::Lte => task_date_portion <= target_portion,
+                    CompareOp::Gt => task_date_portion > target_portion,
+                    CompareOp::Gte => task_date_portion >= target_portion,
+                }
             }
         }
 
@@ -289,9 +337,21 @@ pub fn group_by_directives(directives: &[Directive], tasks: &[StoredTask]) -> Ve
     let field_prefix = capitalize(field_display_name(&directive.field));
     let mut groups: Vec<TaskGroup> = group_map
         .into_iter()
-        .map(|(value, tasks)| TaskGroup {
-            label: format!("{field_prefix}: {value}"),
-            tasks,
+        .map(|(value, mut tasks)| {
+            if matches!(
+                directive.field,
+                Field::Due
+                    | Field::Scheduled
+                    | Field::Starting
+                    | Field::Updated
+                    | Field::CreationDate
+            ) {
+                sort_by_directives(&mut tasks, std::slice::from_ref(directive));
+            }
+            TaskGroup {
+                label: format!("{field_prefix}: {value}"),
+                tasks,
+            }
         })
         .collect();
 
@@ -320,16 +380,30 @@ pub struct TaskGroup {
 
 fn task_group_key(task: &Task, field: &Field) -> Option<String> {
     match field {
-        Field::Due => task.tags.get("due").cloned(),
-        Field::Scheduled => task.tags.get("scheduled").cloned(),
-        Field::Starting => task.tags.get("starting").cloned(),
-        Field::Updated => task.tags.get("updated").cloned(),
-        Field::CreationDate => task.creation_date.clone(),
+        Field::Due => task.tags.get("due").map(|v| date_portion_for_group(v)),
+        Field::Scheduled => task
+            .tags
+            .get("scheduled")
+            .map(|v| date_portion_for_group(v)),
+        Field::Starting => task.tags.get("starting").map(|v| date_portion_for_group(v)),
+        Field::Updated => task.tags.get("updated").map(|v| date_portion_for_group(v)),
+        Field::CreationDate => task
+            .creation_date
+            .as_ref()
+            .map(|v| date_portion_for_group(v)),
         Field::Priority => task.priority.map(|c| c.to_string()),
         Field::Project => task.projects.first().cloned(),
         Field::Context => task.contexts.first().cloned(),
         Field::Description => Some(task.description.clone()),
         Field::Done => Some(if task.done { "Done" } else { "Not done" }.to_string()),
+    }
+}
+
+fn date_portion_for_group(value: &str) -> String {
+    if value.len() >= 10 {
+        value[..10].to_string()
+    } else {
+        value.to_string()
     }
 }
 

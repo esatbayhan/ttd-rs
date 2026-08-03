@@ -121,17 +121,20 @@ impl EditorState {
         for context in &prefill.contexts {
             tokens.push(format!("@{context}"));
         }
-        if let Some(due) = &prefill.due {
-            tokens.push(format!("due:{}", resolve_date_value(due, today)));
+        if let Some(due) = &prefill.due
+            && let Some(value) = resolve_date_value(due, today)
+        {
+            tokens.push(format!("due:{value}"));
         }
-        if let Some(scheduled) = &prefill.scheduled {
-            tokens.push(format!(
-                "scheduled:{}",
-                resolve_date_value(scheduled, today)
-            ));
+        if let Some(scheduled) = &prefill.scheduled
+            && let Some(value) = resolve_date_value(scheduled, today)
+        {
+            tokens.push(format!("scheduled:{value}"));
         }
-        if let Some(starting) = &prefill.starting {
-            tokens.push(format!("starting:{}", resolve_date_value(starting, today)));
+        if let Some(starting) = &prefill.starting
+            && let Some(value) = resolve_date_value(starting, today)
+        {
+            tokens.push(format!("starting:{value}"));
         }
 
         let suffix = if tokens.is_empty() {
@@ -435,7 +438,7 @@ impl EditorSaveTarget for TaskStore {
     }
 }
 
-fn upsert_tag(raw_line: &str, key: &str, value: Option<&str>) -> String {
+pub(crate) fn upsert_tag(raw_line: &str, key: &str, value: Option<&str>) -> String {
     let prefix = format!("{key}:");
     let mut tokens = raw_line
         .split_whitespace()

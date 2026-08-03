@@ -14,6 +14,12 @@ pub enum PickerKind {
 }
 
 #[derive(Debug, Clone)]
+pub struct AboutState {
+    pub task_dir: Option<std::path::PathBuf>,
+    pub config_file: std::path::PathBuf,
+}
+
+#[derive(Debug, Clone)]
 pub struct PickerState {
     pub kind: PickerKind,
     pub items: Vec<Field>,
@@ -107,8 +113,12 @@ pub enum AppAction {
     ScrollListViewer(isize),
     EditListExternally,
     ToggleSidebar,
+    ToggleHelpBar,
     ResizeSidebar(isize),
     ActivateSidebarItem,
+    ToggleAbout,
+    Undo,
+    TouchUpdated,
 }
 
 pub struct AppState {
@@ -124,7 +134,10 @@ pub struct AppState {
     pub should_quit: bool,
     pub picker: Option<PickerState>,
     pub list_viewer: Option<ListViewerState>,
+    pub about: Option<AboutState>,
     pub sidebar_width: Cell<u16>,
+    pub help_bar_visible: bool,
+    pub editor_highlighting: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,7 +180,10 @@ impl AppState {
             should_quit: false,
             picker: None,
             list_viewer: None,
+            about: None,
             sidebar_width: Cell::new(24),
+            help_bar_visible: true,
+            editor_highlighting: true,
         }
     }
 
@@ -209,6 +225,10 @@ impl AppState {
 
         if self.list_viewer.is_some() {
             return self.handle_list_viewer_key(key);
+        }
+
+        if self.about.is_some() {
+            return self.handle_about_key(key);
         }
 
         if self.picker.is_some() {
@@ -315,6 +335,13 @@ impl AppState {
             " " => Some(AppAction::ToggleGroup),
             "n" => Some(AppAction::NextSearchResult),
             "N" => Some(AppAction::PreviousSearchResult),
+            "?" => {
+                self.help_bar_visible = !self.help_bar_visible;
+                Some(AppAction::ToggleHelpBar)
+            }
+            "i" => Some(AppAction::ToggleAbout),
+            "u" => Some(AppAction::TouchUpdated),
+            "U" => Some(AppAction::Undo),
             _ => None,
         }
     }
@@ -454,6 +481,13 @@ impl AppState {
                 Some(AppAction::CloseListViewer)
             }
             "e" => Some(AppAction::EditListExternally),
+            _ => None,
+        }
+    }
+
+    fn handle_about_key(&mut self, key: &str) -> Option<AppAction> {
+        match key {
+            "esc" | "q" | "i" | "enter" => Some(AppAction::ToggleAbout),
             _ => None,
         }
     }

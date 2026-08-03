@@ -5,6 +5,8 @@
 It stores tasks as plain text, keeps open and completed items in a
 `todo.txt.d` style directory layout, and provides both a CLI and a full TUI.
 
+**Spec:** [v3.0.0](https://github.com/esatbayhan/ttd-spec/releases/tag/v3.0.0)
+
 ## Features
 
 - **Plain-text storage**: one task per `.txt` file in a directory
@@ -73,8 +75,20 @@ welcome screen where you enter the path to your task directory. Once
 configured, it enters the main screen.
 
 Config is stored at:
-- `$XDG_CONFIG_HOME/ttd/config.txt`
-- or `~/.config/ttd/config.txt`
+- `$XDG_CONFIG_HOME/ttd/config.conf`
+- or `~/.config/ttd/config.conf`
+
+Settings are `key=value` pairs:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `task_dir` | *(required)* | Path to your todo.txt.d directory |
+| `editor` | env fallback | Command to open smart list files externally |
+| `sidebar_width` | `20` | Sidebar width as a percentage of terminal columns |
+| `sidebar_min_width` | `0` | Minimum sidebar width (percentage) |
+| `sidebar_max_width` | `50` | Maximum sidebar width (percentage) |
+| `show_help_bar` | `true` | Whether the bottom hint panel is visible on startup |
+| `auto_update_on_edit` | `false` | Set `updated:YYYY-MM-DD` automatically when editing a task |
 
 ## Smart lists
 
@@ -121,8 +135,12 @@ and `@Context` entries extracted from your tasks.
 | `o` | Temporary group (opens field picker) |
 | `O` | Deactivate temporary group |
 | `r` | Reverse current sort order |
+| `u` | Touch `updated:YYYY-MM-DD` on selected task |
+| `U` | Undo last action |
 | `/` | Search tasks |
 | `R` | Force refresh |
+| `?` | Toggle bottom hint panel |
+| `i` | About / settings |
 | `q` | Quit |
 | `Ctrl+C` | Force exit |
 

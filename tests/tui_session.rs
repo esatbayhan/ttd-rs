@@ -1120,6 +1120,39 @@ fn reversing_sort_reorders_groups_when_same_field() {
 }
 
 #[test]
+fn date_group_order_takes_precedence_over_explicit_sort_within_groups() {
+    let root = temp_path("date-group-with-sort");
+    fs::create_dir_all(root.join("done.txt.d")).unwrap();
+    let lists_dir = root.join("lists.d");
+    fs::create_dir_all(&lists_dir).unwrap();
+    fs::write(
+        lists_dir.join("all.list"),
+        "---\nname: All\n---\nnot done\n\nsort by priority asc\ngroup by due desc\n",
+    )
+    .unwrap();
+    fs::write(root.join("a.txt"), "(B) Late due:2026-04-03T09:00\n").unwrap();
+    fs::write(root.join("b.txt"), "(C) Early C due:2026-04-03T08:00\n").unwrap();
+    fs::write(root.join("c.txt"), "(A) Early A due:2026-04-03T08:00\n").unwrap();
+    fs::write(root.join("d.txt"), "(D) Date only due:2026-04-03\n").unwrap();
+
+    let session = TuiSession::open_default(root, "2026-03-30").unwrap();
+    let expected = ["Late", "Early A", "Early C", "Date only"];
+    let grouped: Vec<_> = session.visible_groups()[0]
+        .tasks
+        .iter()
+        .map(|stored| stored.task.description.split(" due:").next().unwrap())
+        .collect();
+    let flattened: Vec<_> = session
+        .visible_tasks()
+        .iter()
+        .map(|stored| stored.task.description.split(" due:").next().unwrap())
+        .collect();
+
+    assert_eq!(grouped, expected);
+    assert_eq!(flattened, expected);
+}
+
+#[test]
 fn add_task_seeds_editor_with_prefill_from_active_smart_list() {
     let root = temp_path("prefill-add");
     fs::create_dir_all(root.join("done.txt.d")).unwrap();
@@ -1162,4 +1195,26 @@ fn add_task_without_prefill_leaves_editor_blank() {
 
     let editor = session.app().editor.as_ref().expect("editor opened");
     assert!(editor.raw_line.is_empty());
+}
+
+#[test]
+fn add_task_omits_unresolvable_extreme_date_prefill() {
+    let root = temp_path("prefill-extreme-date");
+    fs::create_dir_all(root.join("done.txt.d")).unwrap();
+    let lists_dir = root.join("lists.d");
+    fs::create_dir_all(&lists_dir).unwrap();
+    fs::write(
+        lists_dir.join("1 inbox.list"),
+        "---\nname: Inbox\n---\nnot done\n\n\
+         prefill project work\n\
+         prefill due today+2147483647\n\
+         prefill scheduled today+1T10:00\n",
+    )
+    .unwrap();
+
+    let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
+    session.dispatch_key("a").unwrap();
+
+    let editor = session.app().editor.as_ref().expect("editor opened");
+    assert_eq!(editor.raw_line, " +work scheduled:2026-03-31T10:00");
 }

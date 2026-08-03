@@ -1,7 +1,7 @@
 ---
 name: This Week
 icon: 📆
-description: Anything due in the next 7 days; new tasks default to priority A and due in a week
+description: Anything due in the next 7 days; new tasks default to priority A and due in three days at 10:00
 ---
 due <= today + 7
 not done
@@ -9,6 +9,6 @@ not done
 sort by due asc
 
 prefill priority A
-prefill due today + 7
+prefill due today + 3 T10:00
 prefill scheduled today
 prefill starting today + 1

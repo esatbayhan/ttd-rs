@@ -107,6 +107,21 @@ fn config_round_trip_preserves_editor_field() {
 }
 
 #[test]
+fn config_round_trip_preserves_editor_highlighting() {
+    let root = temp_path("config-rt-hl");
+    fs::create_dir_all(&root).unwrap();
+    let paths = ConfigPaths::from_root(root.clone());
+    let original = AppConfig {
+        task_dir: root.join("todo.txt.d"),
+        editor_highlighting: false,
+        ..AppConfig::new(root.join("todo.txt.d"))
+    };
+    original.save(&paths).unwrap();
+    let loaded = AppConfig::load(&paths).unwrap();
+    assert!(!loaded.editor_highlighting);
+}
+
+#[test]
 fn legacy_single_line_config_loads_with_no_editor() {
     let root = temp_path("config-legacy");
     fs::create_dir_all(&root).unwrap();

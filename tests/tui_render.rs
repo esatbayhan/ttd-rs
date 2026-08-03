@@ -40,13 +40,13 @@ fn write_standard_lists(root: &std::path::Path) {
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
     fs::write(
-        lists_dir.join("inbox.list"),
-        "---\nname: Inbox\norder: 1\n---\nno due\nno scheduled\nno starting\n",
+        lists_dir.join("1 inbox.list"),
+        "---\nname: Inbox\n---\nno due\nno scheduled\nno starting\n",
     )
     .unwrap();
     fs::write(
-        lists_dir.join("done.list"),
-        "---\nname: Done\norder: 5\n---\ndone\n",
+        lists_dir.join("2 done.list"),
+        "---\nname: Done\n---\ndone\n",
     )
     .unwrap();
 }
@@ -99,9 +99,7 @@ fn main_render_shows_sidebar_labels_and_real_task_rows() {
     write_standard_lists(&root);
     fs::write(root.join("a.txt"), "Call Mom +Family @phone\n").unwrap();
 
-    let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
-    // Navigate from Done (default, alphabetically first) to Inbox
-    session.dispatch_key("j").unwrap();
+    let session = TuiSession::open_default(root, "2026-03-30").unwrap();
     let text = render_text(&session);
 
     assert!(text.contains("Inbox"));
@@ -142,8 +140,6 @@ fn session_render_shows_selected_task_and_updates_after_navigation() {
     fs::write(root.join("b.txt"), "Ship package +Errands @town\n").unwrap();
 
     let mut session = TuiSession::open_default(root, "2026-03-30").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
 
     let initial = render_text(&session);
@@ -166,8 +162,6 @@ fn session_render_shows_active_search_query_and_matching_rows() {
     fs::write(root.join("b.txt"), "Email Alex\n").unwrap();
 
     let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
     session.dispatch_key("/").unwrap();
     for key in ["C", "a", "l", "l"] {
         session.dispatch_key(key).unwrap();
@@ -330,10 +324,8 @@ fn navigation_and_task_shortcuts_are_routed_to_actions() {
 
     for (key, expected) in cases {
         let mut app = AppState::new(AppMode::Main);
+        app.focus = FocusArea::TaskList;
         if key == "e" {
-            // `e` only resolves to EditTask when the task list is focused;
-            // on the sidebar (default focus) it opens the list viewer.
-            app.focus = FocusArea::TaskList;
             app.selected_task = Some(SelectedTask::new(
                 TaskId {
                     path: PathBuf::from("/tmp/inbox.txt"),
@@ -471,6 +463,48 @@ fn nonempty_editor_submit_returns_submit_action() {
 }
 
 #[test]
+fn help_bar_renders_all_entries_at_narrow_width() {
+    let app = AppState::new(AppMode::Main);
+    let buffer = render(&app);
+    let text = buffer_text(&buffer);
+    eprintln!("full render text:\n{text}");
+    assert!(
+        text.contains("quit"),
+        "help bar should contain 'quit' even at 80 cols"
+    );
+    assert!(
+        text.contains("resize"),
+        "help bar should contain 'resize' even at 80 cols"
+    );
+    assert!(
+        text.contains("sidebar"),
+        "help bar should contain 'sidebar' even at 80 cols"
+    );
+}
+
+#[test]
+fn help_bar_wraps_to_multiple_lines_on_narrow_terminal() {
+    use ratatui::widgets::{Paragraph, Wrap};
+    use ttd::tui::widgets::render_help_bar;
+
+    let app = AppState::new(AppMode::Main);
+    let para: Paragraph = render_help_bar(&app).wrap(Wrap { trim: false });
+
+    let lc80 = para.line_count(80);
+    let lc120 = para.line_count(120);
+    let text = help_bar_text(&app);
+    let text_len = text.len();
+
+    eprintln!("text length: {text_len}, line_count(80)={lc80}, line_count(120)={lc120}");
+    eprintln!("text: {text}");
+
+    assert!(
+        lc80 > 1,
+        "at width 80, help bar should wrap to >1 lines, got {lc80}"
+    );
+}
+
+#[test]
 fn help_bar_shows_navigation_keys_at_default_state() {
     let app = AppState::new(AppMode::Main);
     let text = help_bar_text(&app);
@@ -599,6 +633,15 @@ fn task_line_shows_creation_date_as_tag_card() {
 }
 
 #[test]
+fn task_line_shows_updated_tag() {
+    let task = ttd::parser::parse_task_line("Review goals updated:2026-04-22 +Personal");
+    let text = task_line_text(&task, false);
+    assert!(text.contains("updated: 2026-04-22"));
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(!lines[0].contains("updated:2026-04-22"));
+}
+
+#[test]
 fn task_line_omits_creation_date_when_absent() {
     let task = ttd::parser::parse_task_line("Buy groceries +Personal @home");
     let text = task_line_text(&task, false);
@@ -649,9 +692,7 @@ fn session_render_wraps_long_task_descriptions() {
     )
     .unwrap();
 
-    let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
+    let session = TuiSession::open_default(root, "2026-03-31").unwrap();
 
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -699,8 +740,6 @@ fn session_render_scrolls_to_keep_selected_task_visible() {
     }
 
     let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
 
     for _ in 0..19 {
@@ -830,8 +869,6 @@ fn task_pane_scrollbar_appears_when_tasks_overflow() {
     }
 
     let mut session = TuiSession::open_default(root, "2026-04-01").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
 
     let backend = TestBackend::new(80, 12);
@@ -872,8 +909,6 @@ fn session_render_scroll_keeps_selected_visible_in_narrow_terminal() {
     }
 
     let mut session = TuiSession::open_default(root, "2026-03-31").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
 
     // Navigate to the last task
@@ -974,8 +1009,6 @@ fn scrollbar_thumb_reaches_bottom_when_last_task_selected() {
     }
 
     let mut session = TuiSession::open_default(root, "2026-04-01").unwrap();
-    // Navigate from Done (default) to Inbox so tasks are visible
-    session.dispatch_key("j").unwrap();
     session.app_mut().focus = FocusArea::TaskList;
 
     // Navigate to the very last task
@@ -1082,5 +1115,95 @@ fn task_pane_title_shows_group_override_indicator() {
     assert!(
         text.contains("[group: priority"),
         "task pane title should show group override indicator"
+    );
+}
+
+#[test]
+fn about_panel_renders_with_version_and_paths() {
+    use ttd::tui::app::AboutState;
+
+    let root = temp_path("about-panel");
+    fs::create_dir_all(root.join("done.txt.d")).unwrap();
+    write_standard_lists(&root);
+    fs::write(root.join("a.txt"), "Call Mom\n").unwrap();
+
+    let mut session = TuiSession::open_default(root.clone(), "2026-03-31").unwrap();
+    session.app_mut().about = Some(AboutState {
+        task_dir: Some(root.clone()),
+        config_file: root.join("config.conf"),
+    });
+
+    let text = render_text(&session);
+    assert!(
+        text.contains("About ttd-rs"),
+        "about panel should show 'About ttd-rs' title"
+    );
+    assert!(
+        text.contains("App Ver."),
+        "about panel should show app version label"
+    );
+    assert!(
+        text.contains("Spec Ver."),
+        "about panel should show spec version label"
+    );
+    assert!(
+        text.contains("Task dir"),
+        "about panel should show task dir label"
+    );
+    assert!(
+        text.contains("Config"),
+        "about panel should show config file label"
+    );
+    assert!(text.contains("License"), "about panel should show license");
+    assert!(
+        text.contains("Esat Bayhan"),
+        "about panel should show author"
+    );
+    assert!(
+        text.contains("github.com/esatbayhan/ttd-rs"),
+        "about panel should show project page"
+    );
+}
+
+#[test]
+fn wrap_line_continuation_aligns_with_first_line() {
+    use ttd::tui::render::wrap_line;
+
+    let label = "Task dir:    ";
+    let value = "/a/very/very/very/very/very/very/very/very/long/path/that/wraps";
+    let result = wrap_line(label, value, 61);
+    let lines: Vec<&str> = result.lines().collect();
+    assert!(
+        lines.len() >= 2,
+        "should wrap to multiple lines, got: {lines:?}"
+    );
+
+    let first = lines[0];
+    let second = lines[1];
+
+    let first_val_start = first.find('/').expect("first line should contain path");
+    let second_val_start = second
+        .find(|c: char| !c.is_whitespace())
+        .expect("continuation should have non-whitespace");
+
+    assert_eq!(
+        first_val_start, second_val_start,
+        "continuation should align with first line value\nfirst:  {first:?}\nsecond: {second:?}"
+    );
+}
+
+#[test]
+fn spec_version_constant_is_valid_semver() {
+    assert!(
+        ttd::SPEC_VERSION.chars().filter(|c| *c == '.').count() >= 2,
+        "SPEC_VERSION should contain at least two dots (X.Y.Z): {:?}",
+        ttd::SPEC_VERSION
+    );
+    assert!(
+        ttd::SPEC_VERSION
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '.'),
+        "SPEC_VERSION should be semver-like (digits and dots): {:?}",
+        ttd::SPEC_VERSION
     );
 }

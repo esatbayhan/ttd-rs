@@ -72,10 +72,7 @@ fn run_tui(cli_task_dir: Option<PathBuf>) -> io::Result<()> {
     let launch_mode = match override_task_dir(cli_task_dir)? {
         Some(task_dir) => LaunchMode::Main(ttd::config::AppConfig {
             task_dir,
-            editor: None,
-            sidebar_width: 20,
-            sidebar_min_width: 0,
-            sidebar_max_width: 50,
+            ..ttd::config::AppConfig::new(PathBuf::new())
         }),
         None => LaunchMode::from_disk(&paths)?,
     };
@@ -180,6 +177,9 @@ fn run_live_tui(mut session: TuiSession, paths: &ConfigPaths) -> io::Result<()> 
                 if let Event::Mouse(mouse) = &event {
                     if session.app().editor.is_none()
                         && session.app().save_conflict.is_none()
+                        && session.app().about.is_none()
+                        && session.app().picker.is_none()
+                        && session.app().list_viewer.is_none()
                         && !session.app().confirm_delete
                         && session.app().mode == AppMode::Main
                         && let Some(rects) = layout.get()
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(session.app().mode, ttd::tui::app::AppMode::Main);
         assert!(session.app().welcome_input.is_empty());
         let config_content = fs::read_to_string(&paths.config_file).unwrap();
-        assert!(config_content.starts_with(&task_dir.display().to_string()));
+        assert!(config_content.starts_with(&format!("task_dir={}", task_dir.display())));
         assert!(config_content.contains("sidebar_width="));
         assert!(task_dir.join("done.txt.d").is_dir());
     }

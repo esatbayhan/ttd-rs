@@ -1,0 +1,10 @@
+---
+name: Today Until Noon
+icon: 
+description: Tasks due or scheduled before noon today
+---
+due <= todayT12:00
+OR
+scheduled <= todayT12:00
+
+sort by due asc

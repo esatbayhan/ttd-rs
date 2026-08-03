@@ -771,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "ttd"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "crossterm",
  "expectrl",

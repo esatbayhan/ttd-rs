@@ -16,13 +16,13 @@ fn write_standard_lists(root: &std::path::Path) {
     let lists_dir = root.join("lists.d");
     fs::create_dir_all(&lists_dir).unwrap();
     fs::write(
-        lists_dir.join("inbox.list"),
-        "---\nname: Inbox\norder: 1\n---\nno due\nno scheduled\nno starting\n",
+        lists_dir.join("1 inbox.list"),
+        "---\nname: Inbox\n---\nno due\nno scheduled\nno starting\n",
     )
     .unwrap();
     fs::write(
-        lists_dir.join("done.list"),
-        "---\nname: Done\norder: 5\n---\ndone\n",
+        lists_dir.join("2 done.list"),
+        "---\nname: Done\n---\ndone\n",
     )
     .unwrap();
 }
@@ -50,11 +50,9 @@ fn first_run_welcome_flow_persists_config_and_shows_real_task_view() {
     process.expect(Regex("Call.*Mom.*\\+Family")).unwrap();
     process.send(ControlCode::EndOfText).unwrap();
 
-    let config_path = config_home.join("ttd/config.txt");
-    assert_eq!(
-        fs::read_to_string(config_path).unwrap(),
-        task_dir.display().to_string()
-    );
+    let config_path = config_home.join("ttd/config.conf");
+    let saved = fs::read_to_string(config_path).unwrap();
+    assert!(saved.starts_with(&format!("task_dir={}", task_dir.display())));
 }
 
 #[test]
@@ -71,8 +69,8 @@ fn live_tui_search_shows_the_active_query() {
     fs::write(task_dir.join("b.txt"), "Email Alex\n").unwrap();
     fs::create_dir_all(config_home.join("ttd")).unwrap();
     fs::write(
-        config_home.join("ttd/config.txt"),
-        task_dir.display().to_string(),
+        config_home.join("ttd/config.conf"),
+        format!("task_dir={}\n", task_dir.display()),
     )
     .unwrap();
 
@@ -104,8 +102,8 @@ fn live_tui_delete_removes_the_selected_task_file() {
     fs::write(task_dir.join("b.txt"), "Beta task\n").unwrap();
     fs::create_dir_all(config_home.join("ttd")).unwrap();
     fs::write(
-        config_home.join("ttd/config.txt"),
-        task_dir.display().to_string(),
+        config_home.join("ttd/config.conf"),
+        format!("task_dir={}\n", task_dir.display()),
     )
     .unwrap();
 

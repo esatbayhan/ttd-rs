@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::fs;
 use std::io;
 use std::path::PathBuf;
 
@@ -8,7 +9,7 @@ use crate::parser::parse_task_line;
 use crate::query::sort_tasks;
 use crate::refresh::SnapshotIndex;
 use crate::smartlist::{Direction, Directive};
-use crate::store::{Snapshot, StoredTask, TaskId, TaskStore};
+use crate::store::{EditSaveOutcome, Snapshot, StoredTask, TaskId, TaskStore};
 use crate::task::Task;
 use crate::tui::app::{AppAction, AppMode, AppState, FocusArea};
 use crate::tui::editor::{ConflictChoice, EditorState, SelectedTask};
@@ -119,6 +120,28 @@ impl SelectionTarget {
     }
 }
 
+enum UndoKind {
+    Deleted {
+        filename: String,
+        raw: String,
+        was_done: bool,
+    },
+    Toggled {
+        filename: String,
+        was_done_before: bool,
+        completion_date: Option<String>,
+    },
+    Updated {
+        filename: String,
+        raw: String,
+    },
+}
+
+struct UndoEntry {
+    kind: UndoKind,
+    pre_target: SelectionTarget,
+}
+
 pub struct TuiSession {
     app: AppState,
     store: Option<TaskStore>,
@@ -133,6 +156,7 @@ pub struct TuiSession {
     task_scroll_override: Option<u16>,
     fs_index: Option<SnapshotIndex>,
     view_overrides: ViewOverrides,
+    undo_stack: Vec<UndoEntry>,
     collapsed_groups: HashSet<Vec<String>>,
     /// Resolved editor command (e.g. `nvim` or `code -w`); used when the user
     /// presses `e` to open a smart list externally. May contain spaces; split
@@ -145,6 +169,9 @@ pub struct TuiSession {
     sidebar_width_pct: u8,
     sidebar_min_width_pct: u8,
     sidebar_max_width_pct: u8,
+    show_help_bar: bool,
+    auto_update_on_edit: bool,
+    editor_highlighting: bool,
     paths: ConfigPaths,
     last_terminal_cols: Cell<u16>,
     sidebar_cursor: usize,
@@ -163,6 +190,9 @@ impl TuiSession {
                 let sidebar_width_pct = config.sidebar_width;
                 let sidebar_min_width_pct = config.sidebar_min_width;
                 let sidebar_max_width_pct = config.sidebar_max_width;
+                let show_help_bar = config.show_help_bar;
+                let auto_update_on_edit = config.auto_update_on_edit;
+                let editor_highlighting = config.editor_highlighting;
                 let mut session = Self::open(
                     config.task_dir,
                     today,
@@ -172,6 +202,11 @@ impl TuiSession {
                     paths,
                 )?;
                 session.editor_command = editor;
+                session.show_help_bar = show_help_bar;
+                session.auto_update_on_edit = auto_update_on_edit;
+                session.editor_highlighting = editor_highlighting;
+                session.app.help_bar_visible = show_help_bar;
+                session.app.editor_highlighting = editor_highlighting;
                 Ok(session)
             }
         }
@@ -195,12 +230,16 @@ impl TuiSession {
             task_scroll_override: None,
             fs_index: None,
             view_overrides: ViewOverrides::new(),
+            undo_stack: Vec::new(),
             collapsed_groups: HashSet::new(),
             editor_command: crate::config::resolve_editor(None),
             pending_external_edit: None,
             sidebar_width_pct: 20,
             sidebar_min_width_pct: 0,
             sidebar_max_width_pct: 50,
+            show_help_bar: true,
+            auto_update_on_edit: false,
+            editor_highlighting: true,
             paths,
             last_terminal_cols: Cell::new(0),
             sidebar_cursor: 0,
@@ -241,12 +280,16 @@ impl TuiSession {
             task_scroll_override: None,
             fs_index,
             view_overrides: ViewOverrides::new(),
+            undo_stack: Vec::new(),
             collapsed_groups: HashSet::new(),
             editor_command: crate::config::resolve_editor(None),
             pending_external_edit: None,
             sidebar_width_pct,
             sidebar_min_width_pct,
             sidebar_max_width_pct,
+            show_help_bar: true,
+            auto_update_on_edit: false,
+            editor_highlighting: true,
             paths,
             last_terminal_cols: Cell::new(0),
             sidebar_cursor: 0,
@@ -340,6 +383,9 @@ impl TuiSession {
             sidebar_width: pct,
             sidebar_min_width: self.sidebar_min_width_pct,
             sidebar_max_width: self.sidebar_max_width_pct,
+            show_help_bar: self.show_help_bar,
+            auto_update_on_edit: self.auto_update_on_edit,
+            editor_highlighting: self.editor_highlighting,
         };
         config.save(&self.paths)
     }
@@ -703,6 +749,9 @@ impl TuiSession {
                     sidebar_width: self.sidebar_width_pct,
                     sidebar_min_width: self.sidebar_min_width_pct,
                     sidebar_max_width: self.sidebar_max_width_pct,
+                    show_help_bar: self.show_help_bar,
+                    auto_update_on_edit: self.auto_update_on_edit,
+                    editor_highlighting: self.editor_highlighting,
                 }
                 .save(paths)?;
                 *self = Self::open(
@@ -811,8 +860,20 @@ impl TuiSession {
                 .first()
                 .is_some_and(|g| !g.label.is_empty());
         if has_groups && !sort_directives.is_empty() {
-            for group in &mut self.visible_groups {
-                crate::smartlist::sort_by_directives(&mut group.tasks, &sort_directives);
+            let has_date_group = group_directives.first().is_some_and(|directive| {
+                matches!(
+                    directive.field,
+                    crate::smartlist::Field::Due
+                        | crate::smartlist::Field::Scheduled
+                        | crate::smartlist::Field::Starting
+                        | crate::smartlist::Field::Updated
+                        | crate::smartlist::Field::CreationDate
+                )
+            });
+            if !has_date_group {
+                for group in &mut self.visible_groups {
+                    crate::smartlist::sort_by_directives(&mut group.tasks, &sort_directives);
+                }
             }
             // If sort and group share the same field, reorder groups by sort direction.
             if let (Some(sd), Some(gd)) = (sort_directives.first(), group_directives.first())
@@ -854,13 +915,32 @@ impl TuiSession {
             }
             AppAction::OpenSelected if self.app.confirm_delete => {
                 let wanted = self.current_selection_target();
-                if let Some(task_id) = self.selected_task().map(|stored| stored.id.clone()) {
+                if let Some(stored) = self.selected_task() {
+                    let task_id = stored.id.clone();
+                    self.push_undo(UndoEntry {
+                        kind: UndoKind::Deleted {
+                            filename: task_id.file_name().to_string(),
+                            raw: stored.task.raw.clone(),
+                            was_done: stored.task.done,
+                        },
+                        pre_target: SelectionTarget::from_stored(stored, self.selected_task_index),
+                    });
                     self.store_mut()?.delete_task(&task_id)?;
                     self.app.confirm_delete = false;
                     self.refresh_to_target(wanted)?;
                 }
             }
             AppAction::SubmitEditor => {
+                if self.auto_update_on_edit
+                    && let Some(editor) = self.app.editor.as_mut()
+                    && editor.task_id.is_some()
+                {
+                    editor.raw_line = crate::tui::editor::upsert_tag(
+                        &editor.raw_line,
+                        "updated",
+                        Some(&self.today),
+                    );
+                }
                 let editor = self.app.editor.clone();
                 let previous_snapshot = self.snapshot.clone();
                 {
@@ -898,15 +978,118 @@ impl TuiSession {
             }
             AppAction::ToggleDone => {
                 let wanted = self.current_selection_target();
-                if let Some(stored) = self.selected_task() {
+                if let Some(stored) = self.selected_task().cloned() {
                     let task_id = stored.id.clone();
-                    if stored.task.done {
+                    let was_done_before = stored.task.done;
+                    let completion_date = stored.task.completion_date.clone();
+                    let pre_target =
+                        SelectionTarget::from_stored(&stored, self.selected_task_index);
+                    self.push_undo(UndoEntry {
+                        kind: UndoKind::Toggled {
+                            filename: task_id.file_name().to_string(),
+                            was_done_before,
+                            completion_date,
+                        },
+                        pre_target,
+                    });
+                    if was_done_before {
                         self.store_mut()?.restore_task(&task_id)?;
                     } else {
                         let today = self.today.clone();
                         self.store_mut()?.mark_done(&task_id, &today)?;
                     }
                     self.refresh_to_target(wanted)?;
+                }
+            }
+            AppAction::TouchUpdated => {
+                let wanted = self.current_selection_target();
+                if let Some(stored) = self.selected_task().cloned() {
+                    let task_id = stored.id.clone();
+                    let original_raw = stored.task.raw.clone();
+                    let new_raw =
+                        crate::tui::editor::upsert_tag(&original_raw, "updated", Some(&self.today));
+                    let pre_target =
+                        SelectionTarget::from_stored(&stored, self.selected_task_index);
+                    self.push_undo(UndoEntry {
+                        kind: UndoKind::Updated {
+                            filename: task_id.file_name().to_string(),
+                            raw: original_raw,
+                        },
+                        pre_target,
+                    });
+                    let store = self.store_mut()?;
+                    match store.save_edited_task(&task_id, &stored.task.raw, &new_raw, false)? {
+                        EditSaveOutcome::Saved => {}
+                        EditSaveOutcome::Conflict { .. } => {
+                            self.undo_stack.pop();
+                        }
+                    }
+                    self.refresh_to_target(wanted)?;
+                }
+            }
+            AppAction::Undo => {
+                let Some(entry) = self.undo_stack.pop() else {
+                    return Ok(());
+                };
+                let UndoEntry { kind, pre_target } = entry;
+                let undo_result: io::Result<()> = match &kind {
+                    UndoKind::Deleted {
+                        filename,
+                        raw,
+                        was_done,
+                    } => {
+                        let dir = if *was_done {
+                            self.store()?.done_dir()
+                        } else {
+                            self.store()?.root_dir().to_path_buf()
+                        };
+                        let path = dir.join(filename);
+                        let contents = format!("{}\n", raw.trim_end_matches(['\r', '\n']));
+                        // NOTE: fs::write bypasses store locking and normalization, but the
+                        // common case (restoring a just-deleted single-line task file) is safe.
+                        fs::write(&path, contents)
+                    }
+                    UndoKind::Toggled {
+                        filename,
+                        was_done_before,
+                        completion_date,
+                    } => {
+                        let today = self.today.clone();
+                        let store = self.store_mut()?;
+                        let id_in_new_loc = if *was_done_before {
+                            TaskId {
+                                path: store.root_dir().join(filename),
+                                line_index: 0,
+                            }
+                        } else {
+                            TaskId {
+                                path: store.done_dir().join(filename),
+                                line_index: 0,
+                            }
+                        };
+                        if *was_done_before {
+                            let date = completion_date.as_deref().unwrap_or(&today);
+                            store.mark_done(&id_in_new_loc, date)
+                        } else {
+                            store.restore_task(&id_in_new_loc)
+                        }
+                    }
+                    UndoKind::Updated { filename, raw } => {
+                        let store = self.store()?;
+                        let id = TaskId {
+                            path: store.root_dir().join(filename),
+                            line_index: 0,
+                        };
+                        let contents = format!("{}\n", raw.trim_end_matches(['\r', '\n']));
+                        fs::write(&id.path, contents)
+                    }
+                };
+                match undo_result {
+                    Ok(()) => self.refresh_to_target(Some(pre_target))?,
+                    Err(e) => {
+                        self.undo_stack.push(UndoEntry { kind, pre_target });
+                        return Err(e);
+                    }
                 }
             }
             AppAction::Refresh => {
@@ -1038,6 +1221,20 @@ impl TuiSession {
                 }
                 let _ = self.save_sidebar_config();
             }
+            AppAction::ToggleHelpBar => {
+                self.show_help_bar = self.app.help_bar_visible;
+                let _ = self.save_sidebar_config();
+            }
+            AppAction::ToggleAbout => {
+                if self.app.about.is_some() {
+                    self.app.about = None;
+                } else {
+                    self.app.about = Some(super::app::AboutState {
+                        task_dir: self.store.as_ref().map(|s| s.root_dir().to_path_buf()),
+                        config_file: self.paths.config_file.clone(),
+                    });
+                }
+            }
             AppAction::ResizeSidebar(delta) => {
                 if let Ok((cols, _)) = crossterm::terminal::size() {
                     let current = self.app.sidebar_width.get() as isize;
@@ -1164,6 +1361,14 @@ impl TuiSession {
     fn current_selection_target(&self) -> Option<SelectionTarget> {
         self.selected_task()
             .map(|stored| SelectionTarget::from_stored(stored, self.selected_task_index))
+    }
+
+    fn push_undo(&mut self, entry: UndoEntry) {
+        const MAX_UNDO: usize = 100;
+        if self.undo_stack.len() >= MAX_UNDO {
+            self.undo_stack.remove(0);
+        }
+        self.undo_stack.push(entry);
     }
 
     fn refresh_to_target(&mut self, wanted: Option<SelectionTarget>) -> io::Result<()> {

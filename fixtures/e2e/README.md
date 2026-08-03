@@ -43,7 +43,7 @@ Most fixture lists have prefill / template-variable / lenient-parsing
 content that's worth inspecting through the viewer:
 
 - `7 Work Inbox.list` — multi-key prefill (`project`, `context`)
-- `9 This Week.list` — all four prefill kinds plus relative date offsets
+- `9 This Week.list` — all four prefill kinds plus a timed relative due offset
 - `ttd/bugs.list` — `{{dir}}` template variable in both a filter and a
   prefill value
 - `invalid/dir-out-of-range.list` — out-of-range template; the list is
@@ -62,7 +62,7 @@ fixtures/e2e/
     ├── done.txt.d/
     │   └── *.txt                   completed tasks
     └── lists.d/
-        ├── 1 Today.list … 9 …      pinned (root) smart lists
+        ├── 1 Today.list … 13 No Time Due.list …  pinned (root) smart lists
         ├── A Group By Project.list  …
         ├── B Excludes Test.list
         ├── ttd/
@@ -105,8 +105,14 @@ fixtures/e2e/
 | `26-wrong-date-format.txt`            | **Lenient:** `04-20-2026` not `YYYY-MM-DD` — stays in description              |
 | `27-duplicate-due.txt`                | **Duplicate keys:** first `due:` wins; second stays in description             |
 | `28-malformed-due.txt`                | **Lenient:** `due:next-week` not a date — stays in description                 |
-| `29-time-not-tag.txt`                 | **Lenient:** `time:09:00` value contains `:` — not a valid tag                 |
+| `29-time-general-tag.txt`             | `time:09:00` general tag with colon in value (tag-value spec v3.0.0)           |
 | `30-priority-z.txt`                   | Priority `Z` (boundary of A–Z range)                                           |
+| `31-due-with-time.txt`                | `due:YYYY-MM-DDTHH:MM` tag with time (spec v3.0.0)                             |
+| `32-scheduled-with-time.txt`          | `scheduled:YYYY-MM-DDTHH:MM` tag with time (spec v3.0.0)                       |
+| `33-updated-with-time.txt`            | `updated:YYYY-MM-DDTHH:MM` tag with time (spec v3.0.0)                         |
+| `34-due-this-evening.txt`             | `due:2026-04-25T19:00` — due today after 6 PM, hits Evening After Six list     |
+| `35-creation-date-with-time.txt`      | `creation_date` with optional `THH:MM` time (spec v3.0.0)                      |
+| `36-starting-with-time.txt`           | `starting:YYYY-MM-DDTHH:MM` tag with time (future, spec v3.0.0)                |
 
 ## Done tasks (`done.txt.d/*.txt`)
 
@@ -116,6 +122,7 @@ fixtures/e2e/
 | `done-02-both-dates.txt`      | `x completion-date creation-date description`              |
 | `done-03-with-metadata.txt`   | Done task carrying project, context, and `due` tag         |
 | `done-04-with-updated.txt`    | Done task carrying `updated` tag                           |
+| `done-05-completed-with-time.txt` | Done task with time on `completion_date` (spec v3.0.0)   |
 
 ## Smart lists (`lists.d/*.list`)
 
@@ -131,9 +138,13 @@ fixtures/e2e/
 | `6 Year End.list`          | **Absolute date anchor:** `due <= 2026-12-31`; `prefill due 2026-12-31-3` (offset on date) |
 | `7 Work Inbox.list`        | `project includes` + `no priority`; **prefill** project + context                          |
 | `8 High Priority.list`     | `priority above C`; multi-key sort (`priority asc`, then `creation_date asc`)              |
-| `9 This Week.list`         | `due <= today + 7` + `not done`; **prefill** priority + due + scheduled + starting         |
+| `9 This Week.list`         | `due <= today + 7` + `not done`; **prefill** priority + timed relative due (`today + 3 T10:00`) + scheduled + starting |
 | `A Group By Project.list`  | `has project`; `group by project asc`, `sort by priority asc` (group + sort)               |
 | `B Excludes Test.list`     | `project excludes Test` + `description excludes Test` (`excludes` operator)                |
+| `10 Today Until Noon.list` | **Time-aware anchor:** `due <= todayT12:00` OR `scheduled <= todayT12:00` (spec v3.0.0)   |
+| `11 Evening Tasks.list`    | **Time-refinement:** `has time due` OR `has time scheduled`; group by due (spec v3.0.0)   |
+| `12 Evening After Six.list` | **Time-aware comparison:** `due > todayT18:00` (spec v3.0.0)                              |
+| `13 No Time Due.list`      | **Time-refinement:** `no time due` requires a date-only `due` field (spec v3.0.0)          |
 
 ### Grouped (template variables)
 
@@ -159,4 +170,9 @@ fixtures/e2e/
 
 The fixture aims to hit **every rule** in the spec at least once. When
 adding a new spec feature or implementation behavior, add a fixture file
-here as part of the same change — see `CLAUDE.md` § "End-to-End Fixtures".
+here as part of the same change — see `docs/projects/ttd-rs.md`
+§ "End-to-End Fixtures" in the ttd-workbench.
+
+| Feature | Behavior | Exercise via |
+|---|---|---|
+| Editor syntax highlighting | Colored tokens in add/edit editor input | `a` / `e` modal |

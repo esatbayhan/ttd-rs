@@ -69,10 +69,12 @@ pub enum DateAnchor {
 }
 
 /// A resolved date value: anchor plus signed integer offset in days.
+/// An optional `time` (e.g. `"09:00"`) makes the anchor time-aware.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateValue {
     pub anchor: DateAnchor,
     pub offset: i32,
+    pub time: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +95,10 @@ pub enum Condition {
     },
     Existence {
         field: Field,
+        present: bool,
+    },
+    TimeExistence {
+        field: DateField,
         present: bool,
     },
     DoneFilter {

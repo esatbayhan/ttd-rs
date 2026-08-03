@@ -10,6 +10,9 @@ pub struct AppConfig {
     pub sidebar_width: u8,
     pub sidebar_min_width: u8,
     pub sidebar_max_width: u8,
+    pub show_help_bar: bool,
+    pub auto_update_on_edit: bool,
+    pub editor_highlighting: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -19,8 +22,12 @@ pub struct ConfigPaths {
 }
 
 impl ConfigPaths {
+    pub fn config_file(&self) -> &Path {
+        &self.config_file
+    }
+
     pub fn from_root(root: PathBuf) -> Self {
-        let config_file = root.join("config.txt");
+        let config_file = root.join("config.conf");
         Self { root, config_file }
     }
 
@@ -48,6 +55,9 @@ impl AppConfig {
             sidebar_width: 20,
             sidebar_min_width: 0,
             sidebar_max_width: 50,
+            show_help_bar: true,
+            auto_update_on_edit: false,
+            editor_highlighting: true,
         }
     }
 
@@ -56,7 +66,8 @@ impl AppConfig {
     /// preserved — saving rewrites the file.
     pub fn save(&self, paths: &ConfigPaths) -> io::Result<()> {
         fs::create_dir_all(&paths.root)?;
-        let mut content = self.task_dir.display().to_string();
+        let mut content = "task_dir=".to_string();
+        content.push_str(&self.task_dir.display().to_string());
         if let Some(editor) = &self.editor {
             content.push('\n');
             content.push_str("editor=");
@@ -71,27 +82,60 @@ impl AppConfig {
         content.push('\n');
         content.push_str("sidebar_max_width=");
         content.push_str(&self.sidebar_max_width.to_string());
+        content.push('\n');
+        content.push_str("show_help_bar=");
+        content.push_str(if self.show_help_bar { "true" } else { "false" });
+        content.push('\n');
+        content.push_str("auto_update_on_edit=");
+        content.push_str(if self.auto_update_on_edit {
+            "true"
+        } else {
+            "false"
+        });
+        content.push('\n');
+        content.push_str("editor_highlighting=");
+        content.push_str(if self.editor_highlighting {
+            "true"
+        } else {
+            "false"
+        });
         fs::write(&paths.config_file, content)
     }
 
-    /// Parse the config file. The first non-empty, non-comment line is the
-    /// task directory (legacy single-line form). Subsequent lines are
-    /// `key=value` settings. Lines starting with `#` are comments. Empty
+    /// Parse the config file. Lines starting with `#` are comments; empty
     /// lines are ignored.
     ///
     /// Recognized keys:
     ///
+    /// - `task_dir` — path to the todo.txt.d directory. Also accepted as a
+    ///   bare (legacy) first line for backwards compatibility.
     /// - `editor` — command to launch when opening a smart list externally.
     ///   May include arguments (e.g. `editor=code -w`). Resolution falls
     ///   back to `$VISUAL`, then `$EDITOR`, then a platform default.
+    /// - `show_help_bar` — whether the bottom hint panel is visible on
+    ///   startup. Accepts `true` or `false`. Defaults to `true`.
     pub fn load(paths: &ConfigPaths) -> io::Result<Self> {
-        let raw = fs::read_to_string(&paths.config_file)?;
+        let raw = match fs::read_to_string(&paths.config_file) {
+            Ok(raw) => raw,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                let legacy = paths.root.join("config.txt");
+                if legacy.exists() {
+                    fs::read_to_string(&legacy)?
+                } else {
+                    return Err(e);
+                }
+            }
+            Err(e) => return Err(e),
+        };
 
         let mut task_dir: Option<String> = None;
         let mut editor: Option<String> = None;
         let mut sidebar_width: u8 = 20;
         let mut sidebar_min_width: u8 = 0;
         let mut sidebar_max_width: u8 = 50;
+        let mut show_help_bar = true;
+        let mut auto_update_on_edit = false;
+        let mut editor_highlighting = true;
 
         for line in raw.lines() {
             let trimmed = line.trim_end_matches('\r');
@@ -101,6 +145,12 @@ impl AppConfig {
             }
             if let Some((key, value)) = trimmed.split_once('=') {
                 match key.trim() {
+                    "task_dir" => {
+                        let value = value.trim();
+                        if !value.is_empty() {
+                            task_dir = Some(value.to_string());
+                        }
+                    }
                     "editor" => {
                         let value = value.trim();
                         if !value.is_empty() {
@@ -121,6 +171,15 @@ impl AppConfig {
                         if let Ok(v) = value.trim().parse::<u8>() {
                             sidebar_max_width = v.min(100);
                         }
+                    }
+                    "show_help_bar" => {
+                        show_help_bar = value.trim() == "true";
+                    }
+                    "auto_update_on_edit" => {
+                        auto_update_on_edit = value.trim() == "true";
+                    }
+                    "editor_highlighting" => {
+                        editor_highlighting = value.trim() == "true";
                     }
                     _ => {} // unknown keys silently ignored
                 }
@@ -152,6 +211,9 @@ impl AppConfig {
             sidebar_width,
             sidebar_min_width,
             sidebar_max_width,
+            show_help_bar,
+            auto_update_on_edit,
+            editor_highlighting,
         })
     }
 }

@@ -62,16 +62,16 @@ fn assert_excludes(tasks: &[StoredTask], needle: &str) {
 // ─── Snapshot sanity ──────────────────────────────────────────────────────────
 
 #[test]
-fn fixture_has_30_open_tasks_and_4_done() {
+fn fixture_has_36_open_tasks_and_5_done() {
     let (snapshot, _) = load_fixture();
-    assert_eq!(snapshot.open_tasks.len(), 30, "open task count");
-    assert_eq!(snapshot.done_tasks.len(), 4, "done task count");
+    assert_eq!(snapshot.open_tasks.len(), 36, "open task count");
+    assert_eq!(snapshot.done_tasks.len(), 5, "done task count");
 }
 
 #[test]
-fn fixture_loads_21_smart_lists() {
+fn fixture_loads_25_smart_lists() {
     let (_, lists) = load_fixture();
-    assert_eq!(lists.len(), 21, "smart list count");
+    assert_eq!(lists.len(), 25, "smart list count");
 }
 
 // ─── Pinned (root) lists ──────────────────────────────────────────────────────
@@ -80,9 +80,12 @@ fn fixture_loads_21_smart_lists() {
 fn today_list_returns_due_or_scheduled_today() {
     let (snapshot, lists) = load_fixture();
     let result = evaluate_list(find_list(&lists, "Today"), &snapshot);
-    assert_eq!(result.len(), 2, "Today list expected 2 matches at {TODAY}");
+    assert_eq!(result.len(), 5, "Today list expected 5 matches at {TODAY}");
     assert_contains(&result, "Submit weekly report");
     assert_contains(&result, "Lunch with mentor");
+    assert_contains(&result, "Submit report"); // 31: due:2026-04-25T17:00 (date-only comparison)
+    assert_contains(&result, "Meeting"); // 32: scheduled:2026-04-25T09:00 (date-only comparison)
+    assert_contains(&result, "Dinner plans"); // 34: due:2026-04-25T19:00 (date-only comparison)
     // Sort by priority asc → priority B (Submit weekly report) before no-priority
     assert!(result[0].task.description.contains("Submit weekly report"));
 }
@@ -92,9 +95,9 @@ fn inbox_list_returns_tasks_with_no_date_metadata() {
     let (snapshot, lists) = load_fixture();
     let result = evaluate_list(find_list(&lists, "Inbox"), &snapshot);
     // Excluded (have at least one of due/scheduled/starting):
-    // 05, 06, 07, 12, 16, 17, 18, 21, 22, 23, 27 → 11 tasks.
-    // 30 - 11 = 19 tasks.
-    assert_eq!(result.len(), 19);
+    // 05, 06, 07, 12, 16, 17, 18, 21, 22, 23, 27, 31, 32, 34, 36 → 15 tasks.
+    // 36 - 15 = 21 tasks.
+    assert_eq!(result.len(), 21);
     assert_contains(&result, "Buy bread");
     assert_excludes(&result, "Submit conference proposal"); // 05 has due
     assert_excludes(&result, "Coffee with Alex"); // 06 has scheduled
@@ -107,13 +110,15 @@ fn upcoming_list_groups_by_due_date() {
     let list = find_list(&lists, "Upcoming");
     let matched = evaluate_list(list, &snapshot);
     // due ≤ today + 7 = 2026-05-02
-    // 05 (May 1), 17 (Apr 1), 21 (Apr 25), 23 (Apr 29), 27 (Apr 30)
-    assert_eq!(matched.len(), 5);
+    // 05 (May 1), 17 (Apr 1), 21 (Apr 25), 23 (Apr 29), 27 (Apr 30), 31 (Apr 25), 34 (Apr 25)
+    assert_eq!(matched.len(), 7);
     assert_contains(&matched, "Submit conference proposal");
     assert_contains(&matched, "Submit overdue paperwork");
     assert_contains(&matched, "Submit weekly report");
     assert_contains(&matched, "Renew library card");
     assert_contains(&matched, "Plan retro");
+    assert_contains(&matched, "Submit report"); // 31: due:2026-04-25
+    assert_contains(&matched, "Dinner plans"); // 34: due:2026-04-25
 
     let groups = group_by_directives(&list.group_directives, &matched);
     // 5 unique due dates → 5 groups
@@ -127,9 +132,9 @@ fn stale_list_returns_tasks_without_recent_review() {
     let (snapshot, lists) = load_fixture();
     let result = evaluate_list(find_list(&lists, "Stale"), &snapshot);
     // updated < 2026-03-26 OR no updated
-    // Open tasks WITH updated: 08 (2026-04-22), 12 (2026-04-23) — both fresh, excluded
-    // So stale = open tasks without updated = 30 - 2 = 28
-    assert_eq!(result.len(), 28);
+    // Open tasks WITH updated: 08 (2026-04-22), 12 (2026-04-23), 33 (2026-04-25T15:30) — fresh, excluded
+    // So stale = open tasks without recent updated = 36 - 3 = 33
+    assert_eq!(result.len(), 33);
     assert_contains(&result, "Buy bread");
     assert_excludes(&result, "Review goals"); // 08 has fresh updated
     assert_excludes(&result, "Plan team offsite"); // 12 has fresh updated
@@ -139,13 +144,14 @@ fn stale_list_returns_tasks_without_recent_review() {
 fn done_list_includes_all_done_tasks() {
     let (snapshot, lists) = load_fixture();
     let result = evaluate_list(find_list(&lists, "Done"), &snapshot);
-    assert_eq!(result.len(), 4);
+    assert_eq!(result.len(), 5, "Done list expected 5 matches");
     let descs = descriptions(&result);
     // Sort by description asc
     assert!(descs[0].starts_with("Finish onboarding"));
     assert!(descs[1].starts_with("Refactor parser"));
     assert!(descs[2].starts_with("Review architecture docs"));
-    assert!(descs[3].starts_with("Ship release"));
+    assert!(descs[3].starts_with("Send weekly report"));
+    assert!(descs[4].starts_with("Ship release"));
 }
 
 #[test]
@@ -153,11 +159,14 @@ fn year_end_list_uses_absolute_date_anchor_and_prefill() {
     let (snapshot, lists) = load_fixture();
     let list = find_list(&lists, "Year End");
     let result = evaluate_list(list, &snapshot);
-    // due ≤ 2026-12-31 — every task with a due tag
-    assert_eq!(result.len(), 8);
+    // due ≤ 2026-12-31 — every task with a due tag (now 10 tasks with due)
+    assert_eq!(result.len(), 10);
     // Prefill due 2026-12-31-3 → resolves to 2026-12-28
     let prefill_due = list.prefill.due.as_ref().expect("prefill due present");
-    assert_eq!(resolve_date_value(prefill_due, TODAY), "2026-12-28");
+    assert_eq!(
+        resolve_date_value(prefill_due, TODAY).as_deref(),
+        Some("2026-12-28")
+    );
 }
 
 #[test]
@@ -170,6 +179,7 @@ fn work_inbox_returns_unpriotized_work_tasks_with_prefill() {
     assert_contains(&result, "Email john@example.com about renewal");
     assert_contains(&result, "Stretch goal idea");
     assert_contains(&result, "Plan retro"); // 27, no priority, has due
+    assert_contains(&result, "Standup"); // 29, no priority, has time:09:00 tag
     // Prefill carries project Work + context office
     assert_eq!(list.prefill.projects, vec!["Work"]);
     assert_eq!(list.prefill.contexts, vec!["office"]);
@@ -180,8 +190,8 @@ fn work_inbox_returns_unpriotized_work_tasks_with_prefill() {
 fn high_priority_list_returns_a_or_b_only_with_multikey_sort() {
     let (snapshot, lists) = load_fixture();
     let result = evaluate_list(find_list(&lists, "High Priority"), &snapshot);
-    // Priority A or B: 02, 04, 05, 12, 17, 21, 26 = 7 tasks
-    assert_eq!(result.len(), 7);
+    // Priority A or B: 02, 04, 05, 12, 17, 21, 26, 31 = 8 tasks
+    assert_eq!(result.len(), 8);
     // Sort by priority asc, then creation_date asc.
     // A first (4 tasks), then B (3 tasks). Within A, oldest creation first
     // (17 = 2026-03-01), then 02 and 05 (both 2026-04-20, file order), then 26 (no creation).
@@ -189,13 +199,14 @@ fn high_priority_list_returns_a_or_b_only_with_multikey_sort() {
         .iter()
         .map(|t| t.task.priority.expect("priority present"))
         .collect();
-    assert_eq!(priorities, vec!['A', 'A', 'A', 'A', 'B', 'B', 'B']);
+    assert_eq!(priorities, vec!['A', 'A', 'A', 'A', 'B', 'B', 'B', 'B']);
     assert!(
         result[0]
             .task
             .description
             .contains("Submit overdue paperwork")
     );
+    assert_contains(&result, "Submit report"); // 31: priority B
 }
 
 #[test]
@@ -203,16 +214,20 @@ fn this_week_list_carries_full_prefill() {
     let (snapshot, lists) = load_fixture();
     let list = find_list(&lists, "This Week");
     let result = evaluate_list(list, &snapshot);
-    assert_eq!(result.len(), 5);
-    // Prefill: priority A, due today+7 (= 2026-05-02), scheduled today (= 2026-04-25)
+    assert_eq!(result.len(), 7);
+    // Prefill: priority A, due today+3 at 10:00, scheduled today, starting tomorrow
     assert_eq!(list.prefill.priority, Some('A'));
     assert_eq!(
-        resolve_date_value(list.prefill.due.as_ref().unwrap(), TODAY),
-        "2026-05-02"
+        list.prefill.due.as_ref().unwrap().time.as_deref(),
+        Some("10:00")
     );
     assert_eq!(
-        resolve_date_value(list.prefill.scheduled.as_ref().unwrap(), TODAY),
-        "2026-04-25"
+        resolve_date_value(list.prefill.due.as_ref().unwrap(), TODAY).as_deref(),
+        Some("2026-04-28T10:00")
+    );
+    assert_eq!(
+        resolve_date_value(list.prefill.scheduled.as_ref().unwrap(), TODAY).as_deref(),
+        Some("2026-04-25")
     );
 }
 
@@ -221,8 +236,8 @@ fn group_by_project_groups_into_9_buckets() {
     let (snapshot, lists) = load_fixture();
     let list = find_list(&lists, "By Project");
     let matched = evaluate_list(list, &snapshot);
-    // has project: 30 - 4 (01, 02, 06, 22) = 26
-    assert_eq!(matched.len(), 26);
+    // has project: 36 - 9 (01, 02, 06, 22, 31, 32, 33, 34, 36) = 27
+    assert_eq!(matched.len(), 27);
     let groups = group_by_directives(&list.group_directives, &matched);
     // Expect 9 distinct first-projects: Admin, Errands, Family, Health,
     // Personal, Reading, Test, Work, ttd
@@ -235,8 +250,8 @@ fn excludes_test_list_filters_out_test_tasks() {
     let result = evaluate_list(find_list(&lists, "Not Test"), &snapshot);
     // Excludes anything with project Test (25, 26, 28) AND anything containing
     // the word "test" case-insensitively in its description (16 — long
-    // description happens to contain "to test"). 30 - 4 = 26.
-    assert_eq!(result.len(), 26);
+    // description happens to contain "to test"). 36 - 4 = 32.
+    assert_eq!(result.len(), 32);
     assert_excludes(&result, "Lowercase priority stays");
     assert_excludes(&result, "Wrong creation date format");
     assert_excludes(&result, "Try thing");
@@ -321,10 +336,12 @@ fn unknown_filter_line_is_silently_skipped() {
     let (snapshot, lists) = load_fixture();
     let list = find_list(&lists, "With Unknown Filter");
     let result = evaluate_list(list, &snapshot);
-    // foobar baz quux ignored; due <= today applies → 17 (Apr 1) and 21 (Apr 25)
-    assert_eq!(result.len(), 2);
+    // foobar baz quux ignored; due <= today applies → 17, 21, 31, 34
+    assert_eq!(result.len(), 4);
     assert_contains(&result, "Submit overdue paperwork");
     assert_contains(&result, "Submit weekly report");
+    assert_contains(&result, "Submit report"); // 31: due on today (date-only comparison)
+    assert_contains(&result, "Dinner plans"); // 34: due on today (date-only comparison)
 }
 
 #[test]
@@ -333,8 +350,8 @@ fn malformed_prefill_date_is_replaced_by_next_valid_one() {
     let list = find_list(&lists, "Bad Prefill Date");
     // First "prefill due next-week" discarded; second "prefill due today+3" wins
     assert_eq!(
-        resolve_date_value(list.prefill.due.as_ref().unwrap(), TODAY),
-        "2026-04-28"
+        resolve_date_value(list.prefill.due.as_ref().unwrap(), TODAY).as_deref(),
+        Some("2026-04-28")
     );
 }
 
@@ -352,8 +369,8 @@ fn duplicate_scalar_prefill_uses_first_value() {
     let list = find_list(&lists, "Duplicate Scalar Prefill");
     // First "prefill due today + 1" wins
     assert_eq!(
-        resolve_date_value(list.prefill.due.as_ref().unwrap(), TODAY),
-        "2026-04-26"
+        resolve_date_value(list.prefill.due.as_ref().unwrap(), TODAY).as_deref(),
+        Some("2026-04-26")
     );
 }
 
@@ -423,12 +440,12 @@ fn fixture_covers_documented_parser_features() {
         .expect("lowercase priority task");
     assert_eq!(lowercase.priority, None);
 
-    // tag with two colons (time:09:00) is not parsed as a tag
+    // tag with two colons (time:09:00) is now a valid general tag (v3.0.0)
     let time_task = open
         .iter()
         .find(|t| t.description.contains("time:09:00"))
-        .expect("time-not-tag task");
-    assert!(!time_task.tags.contains_key("time"));
+        .expect("time-tag task");
+    assert_eq!(time_task.tags.get("time"), Some(&"09:00".to_string()));
 
     // duplicate due key — first wins
     let dup = open
@@ -444,11 +461,99 @@ fn fixture_covers_documented_parser_features() {
         .expect("malformed-due task");
     assert!(!bad.tags.contains_key("due"));
 
-    // done tasks: minimal vs both-dates vs metadata-bearing
+    // spec v3.0.0: time-bearing date tags
+    assert!(
+        open.iter()
+            .any(|t| t.tags.get("due").is_some_and(|v| v.len() > 10))
+    );
+    assert!(
+        open.iter()
+            .any(|t| t.tags.get("scheduled").is_some_and(|v| v.len() > 10))
+    );
+    assert!(
+        open.iter()
+            .any(|t| t.tags.get("updated").is_some_and(|v| v.len() > 10))
+    );
+    assert!(
+        open.iter()
+            .any(|t| t.tags.get("starting").is_some_and(|v| v.len() > 10))
+    );
+    // creation date with time
+    assert!(
+        open.iter()
+            .any(|t| t.creation_date.as_ref().is_some_and(|v| v.len() > 10))
+    );
+
+    // done tasks: minimal vs both-dates vs metadata-bearing vs time on completion
+    assert!(
+        done.iter()
+            .any(|t| t.completion_date.as_ref().is_some_and(|v| v.len() > 10))
+    );
     assert!(done.iter().any(|t| t.creation_date.is_none()));
     assert!(done.iter().any(|t| t.creation_date.is_some()));
     assert!(done.iter().any(|t| !t.projects.is_empty()));
     assert!(done.iter().any(|t| t.tags.contains_key("updated")));
+}
+
+// ─── Spec v3.0.0: Time-aware smart lists ──────────────────────────────────────
+
+#[test]
+fn today_until_noon_shows_tasks_due_or_scheduled_before_noon() {
+    let (snapshot, lists) = load_fixture();
+    let result = evaluate_list(find_list(&lists, "Today Until Noon"), &snapshot);
+    // due <= todayT12:00 OR scheduled <= todayT12:00
+    // Matches tasks with due/scheduled <= today, and if today, time <= 12:00
+    // date-only values are treated as T00:00 (00:00 <= 12:00 → match)
+    // 32-scheduled-with-time (T09:00) matches; 31-due-with-time (T17:00) does not
+    assert_contains(&result, "Submit overdue paperwork"); // 17: due:2026-04-01 -> before today
+    assert_contains(&result, "Submit weekly report"); // 21: due:2026-04-25 at T00:00
+    assert_contains(&result, "Lunch with mentor"); // 22: scheduled:2026-04-25 at T00:00
+    assert_contains(&result, "Meeting"); // 32: scheduled:2026-04-25T09:00
+    assert_excludes(&result, "Submit report"); // 31: due:2026-04-25T17:00 > 12:00
+    assert_excludes(&result, "Dinner plans"); // 34: due:2026-04-25T19:00 > 12:00
+}
+
+#[test]
+fn evening_tasks_filters_tasks_with_time_on_due_or_scheduled() {
+    let (snapshot, lists) = load_fixture();
+    let list = find_list(&lists, "Evening Tasks");
+    let matched = evaluate_list(list, &snapshot);
+    // has time due OR has time scheduled
+    assert_contains(&matched, "Submit report"); // 31: due:2026-04-25T17:00 (has time)
+    assert_contains(&matched, "Meeting"); // 32: scheduled:2026-04-25T09:00 (has time)
+    assert_contains(&matched, "Dinner plans"); // 34: due:2026-04-25T19:00 (has time)
+    assert_excludes(&matched, "Submit weekly report"); // 21: due:2026-04-25 (date-only, no time)
+
+    // Group by due — date portion only, time ignored for group boundaries
+    let groups = group_by_directives(&list.group_directives, &matched);
+    // 31 & 34 same date (2026-04-25) → same group; 32 no due → "No due" group
+    assert_eq!(groups.len(), 2);
+    let due_group = groups
+        .iter()
+        .find(|g| g.label.contains("2026-04-25"))
+        .unwrap();
+    assert_eq!(due_group.tasks.len(), 2);
+}
+
+#[test]
+fn no_time_due_requires_an_existing_date_only_due() {
+    let (snapshot, lists) = load_fixture();
+    let result = evaluate_list(find_list(&lists, "No Time Due"), &snapshot);
+    assert_contains(&result, "Submit weekly report"); // 21: date-only due
+    assert_excludes(&result, "Buy bread"); // 01: no due field
+    assert_excludes(&result, "Submit report"); // 31: timed due
+}
+
+#[test]
+fn evening_after_six_uses_gt_with_time_aware_anchor() {
+    let (snapshot, lists) = load_fixture();
+    let result = evaluate_list(find_list(&lists, "Evening After Six"), &snapshot);
+    // due > todayT18:00: all tasks with due strictly after today 18:00 match
+    // date-only values treated as T00:00; 05, 07, 12, 16, 23, 27, 34
+    assert_eq!(result.len(), 7);
+    assert_contains(&result, "Dinner plans"); // 34: due:2026-04-25T19:00 > 18:00
+    assert_excludes(&result, "Submit report"); // 31: due:2026-04-25T17:00 not > 18:00
+    assert_excludes(&result, "Submit weekly report"); // 21: date-only (T00:00), not > 18:00
 }
 
 // ─── Live session: pressing 'a' on a prefill list seeds the editor ────────────
@@ -511,7 +616,7 @@ fn pressing_a_on_this_week_seeds_priority_and_dates() {
         "expected priority prefix, got {raw:?}"
     );
     assert!(
-        raw.contains("due:2026-05-02"),
+        raw.contains("due:2026-04-28T10:00"),
         "expected resolved due tag, got {raw:?}"
     );
     assert!(
@@ -638,4 +743,30 @@ fn fixture_covers_documented_smart_list_features() {
     // Invalid out-of-range template produces parse_error
     let bad = find_list(&lists, "Out Of Range");
     assert!(bad.parse_error.is_some());
+
+    // spec v3.0.0: time-aware date anchors in smart lists
+    let today_noon = find_list(&lists, "Today Until Noon");
+    assert_eq!(today_noon.blocks.len(), 2);
+    assert!(
+        today_noon
+            .sort_directives
+            .iter()
+            .any(|d| d.field == Field::Due),
+        "Today Until Noon sorts by due"
+    );
+
+    // spec v3.0.0: time-refinement existence filters
+    let evening = find_list(&lists, "Evening Tasks");
+    assert_eq!(evening.blocks.len(), 2);
+    assert!(
+        evening
+            .group_directives
+            .iter()
+            .any(|d| d.field == Field::Due),
+        "Evening Tasks groups by due"
+    );
+
+    // spec v3.0.0: time-aware comparison with > operator
+    let after_six = find_list(&lists, "Evening After Six");
+    assert_eq!(after_six.blocks.len(), 1);
 }

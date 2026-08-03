@@ -3,7 +3,7 @@ use std::cell::Cell;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
     ScrollbarState, Wrap,
@@ -12,7 +12,17 @@ use ratatui::widgets::{
 use super::app::{AppMode, AppState, FocusArea};
 use super::editor::EditorMode;
 use super::session::{SidebarItem, TuiSession};
-use super::widgets::{render_help_bar, render_task_lines};
+use super::widgets::{highlight_editor_text, render_help_bar, render_task_lines};
+use crate::parser::display_date;
+
+fn help_bar_height(app: &AppState, width: u16) -> u16 {
+    if !app.help_bar_visible || width == 0 {
+        return 0;
+    }
+    render_help_bar(app)
+        .wrap(Wrap { trim: false })
+        .line_count(width) as u16
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Rects {
@@ -116,9 +126,10 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
     // Pre-compute task pane width for hanging-indent word wrap
     let sidebar_width = app.sidebar_width.get();
     let task_pane_inner_width = {
+        let help_h = help_bar_height(app, frame.area().width);
         let outer = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .constraints([Constraint::Min(0), Constraint::Length(help_h)])
             .split(frame.area());
         let task_min = if sidebar_width > 0 { 24 } else { 0 };
         let chunks = Layout::default()
@@ -288,9 +299,10 @@ fn render_session_main(frame: &mut Frame<'_>, session: &TuiSession, layout: Opti
         override_offset
     } else {
         // Estimate pane dimensions for scroll calculation (matches render_main_shell layout).
+        let help_h = help_bar_height(app, frame.area().width);
         let outer = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(1)])
+            .constraints([Constraint::Min(0), Constraint::Length(help_h)])
             .split(frame.area());
         let task_min = if sidebar_width > 0 { 24 } else { 0 };
         let chunks = Layout::default()
@@ -336,9 +348,10 @@ fn render_main_shell(
     layout: Option<&LayoutRects>,
     scroll_offset: u16,
 ) {
+    let help_h = help_bar_height(app, frame.area().width);
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .constraints([Constraint::Min(0), Constraint::Length(help_h)])
         .split(frame.area());
 
     let sidebar_width = app.sidebar_width.get();
@@ -436,7 +449,9 @@ fn render_main_shell(
         );
     }
 
-    frame.render_widget(render_help_bar(app), outer[1]);
+    if help_h > 0 {
+        frame.render_widget(render_help_bar(app).wrap(Wrap { trim: false }), outer[1]);
+    }
 }
 
 fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
@@ -496,9 +511,21 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
         };
         let helper_text = format!(
             "due: {}\nscheduled: {}\nstarting: {}{}",
-            editor.due.as_deref().unwrap_or("-"),
-            editor.scheduled.as_deref().unwrap_or("-"),
-            editor.starting.as_deref().unwrap_or("-"),
+            editor
+                .due
+                .as_deref()
+                .map(display_date)
+                .unwrap_or_else(|| "-".to_string()),
+            editor
+                .scheduled
+                .as_deref()
+                .map(display_date)
+                .unwrap_or_else(|| "-".to_string()),
+            editor
+                .starting
+                .as_deref()
+                .map(display_date)
+                .unwrap_or_else(|| "-".to_string()),
             shortcut_text
         );
 
@@ -547,10 +574,6 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
         let input_area = chunks[0];
         let helper_area = chunks[2];
 
-        // Character-wrap the raw_line so the cursor arithmetic
-        // (cursor_pos / width, cursor_pos % width) stays correct,
-        // then scroll to keep the cursor row visible.
-        let raw_display = char_wrap_text(&editor.raw_line, inner_width);
         let cursor_row = editor.cursor_pos.checked_div(inner_width).unwrap_or(0);
         let input_height = input_area.height as usize;
         let scroll_offset = if input_height > 0 && cursor_row >= input_height {
@@ -559,12 +582,23 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
             0
         };
 
-        frame.render_widget(
-            Paragraph::new(raw_display)
-                .wrap(Wrap { trim: false })
-                .scroll((scroll_offset as u16, 0)),
-            input_area,
-        );
+        if app.editor_highlighting {
+            let lines = highlight_editor_text(&editor.raw_line, inner_width);
+            frame.render_widget(
+                Paragraph::new(Text::from(lines))
+                    .wrap(Wrap { trim: false })
+                    .scroll((scroll_offset as u16, 0)),
+                input_area,
+            );
+        } else {
+            let raw_display = char_wrap_text(&editor.raw_line, inner_width);
+            frame.render_widget(
+                Paragraph::new(raw_display)
+                    .wrap(Wrap { trim: false })
+                    .scroll((scroll_offset as u16, 0)),
+                input_area,
+            );
+        }
 
         frame.render_widget(
             Paragraph::new(helper_text.as_str()).wrap(Wrap { trim: false }),
@@ -612,6 +646,10 @@ fn render_overlays(frame: &mut Frame<'_>, app: &AppState) {
     if let Some(viewer) = app.list_viewer.as_ref() {
         render_list_viewer(frame, viewer);
     }
+
+    if let Some(about) = app.about.as_ref() {
+        render_about(frame, about);
+    }
 }
 
 fn render_list_viewer(frame: &mut Frame<'_>, viewer: &super::app::ListViewerState) {
@@ -646,6 +684,88 @@ fn render_list_viewer(frame: &mut Frame<'_>, viewer: &super::app::ListViewerStat
         .collect();
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn render_about(frame: &mut Frame<'_>, about: &super::app::AboutState) {
+    let task_dir = about
+        .task_dir
+        .as_deref()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let config_file = about.config_file.display().to_string();
+
+    let modal_width = 65u16.min(frame.area().width.saturating_sub(2));
+    let inner_width = (modal_width.saturating_sub(4)) as usize;
+
+    let lines: [(&str, String); 7] = [
+        ("App Ver.", env!("CARGO_PKG_VERSION").to_string()),
+        ("Spec Ver.", crate::SPEC_VERSION.to_string()),
+        ("License", "MIT".to_string()),
+        ("Author", "Esat Bayhan".to_string()),
+        ("Project", "github.com/esatbayhan/ttd-rs".to_string()),
+        ("Task dir", task_dir),
+        ("Config", config_file),
+    ];
+
+    let label_width = lines.iter().map(|(l, _)| l.len()).max().unwrap_or(0);
+
+    let text = lines
+        .iter()
+        .map(|(label, value)| {
+            let mut padded = label.to_string();
+            while padded.len() < label_width {
+                padded.push(' ');
+            }
+            wrap_line(&padded, value, inner_width)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let line_count = text.lines().count() as u16;
+    let modal_height = (line_count + 2).min(frame.area().height.saturating_sub(2));
+    let modal = centered_rect(frame.area(), modal_width, modal_height);
+    frame.render_widget(Clear, modal);
+    frame.render_widget(
+        Paragraph::new(text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" About ttd-rs "),
+        ),
+        modal,
+    );
+}
+
+pub fn wrap_line(prefix: &str, value: &str, max_width: usize) -> String {
+    let prefix_width = prefix.len() + 1;
+    let first_line_width = max_width.saturating_sub(prefix_width);
+    let cont_prefix = " ".repeat(prefix_width);
+
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() <= first_line_width {
+        return format!("  {prefix} {value}");
+    }
+
+    let mut lines = Vec::new();
+    let mut pos = 0;
+
+    let end = first_line_width.min(chars.len());
+    lines.push(format!(
+        "  {prefix} {}",
+        chars[pos..end].iter().collect::<String>()
+    ));
+    pos = end;
+
+    while pos < chars.len() {
+        let end = (pos + max_width).min(chars.len());
+        lines.push(format!(
+            "  {}{}",
+            cont_prefix,
+            chars[pos..end].iter().collect::<String>()
+        ));
+        pos = end;
+    }
+
+    lines.join("\n")
 }
 
 fn sidebar_label(

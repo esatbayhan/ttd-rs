@@ -3,15 +3,12 @@ use std::path::Path;
 use super::types::*;
 
 fn is_date_literal(value: &str) -> bool {
-    value.len() == 10
-        && value
-            .as_bytes()
-            .iter()
-            .enumerate()
-            .all(|(idx, b)| match idx {
-                4 | 7 => *b == b'-',
-                _ => b.is_ascii_digit(),
-            })
+    let bytes = value.as_bytes();
+    bytes.len() >= 10
+        && bytes[..10].iter().enumerate().all(|(idx, byte)| match idx {
+            4 | 7 => *byte == b'-',
+            _ => byte.is_ascii_digit(),
+        })
 }
 
 /// Parse a `date-value` per LISTS.md grammar.
@@ -21,12 +18,13 @@ fn is_date_literal(value: &str) -> bool {
 /// - `today + N` / `today - N` (spaces optional)
 /// - `YYYY-MM-DD`
 /// - `YYYY-MM-DD + N` / `YYYY-MM-DD - N` (spaces optional)
+/// - `THH:MM` time suffix after anchor and optional offset
 fn parse_date_value(value: &str) -> Option<DateValue> {
     let value = value.trim();
 
     let (anchor, rest) = if let Some(rest) = value.strip_prefix("today") {
         (DateAnchor::Today, rest)
-    } else if value.len() >= 10 && is_date_literal(&value[..10]) {
+    } else if is_date_literal(value) {
         (DateAnchor::Date(value[..10].to_string()), &value[10..])
     } else {
         return None;
@@ -34,22 +32,83 @@ fn parse_date_value(value: &str) -> Option<DateValue> {
 
     let rest = rest.trim_start();
     if rest.is_empty() {
-        return Some(DateValue { anchor, offset: 0 });
+        return Some(DateValue {
+            anchor,
+            offset: 0,
+            time: None,
+        });
     }
 
-    let (sign, num_str) = if let Some(num) = rest.strip_prefix('+') {
-        (1i32, num.trim_start())
-    } else if let Some(num) = rest.strip_prefix('-') {
-        (-1i32, num.trim_start())
+    let (sign, rest) = if let Some(r) = rest.strip_prefix('+') {
+        (1i32, r.trim_start())
+    } else if let Some(r) = rest.strip_prefix('-') {
+        (-1i32, r.trim_start())
     } else {
-        return None;
+        return try_parse_time_suffix(
+            rest,
+            DateValue {
+                anchor,
+                offset: 0,
+                time: None,
+            },
+        );
     };
 
-    let num: i32 = num_str.trim().parse().ok()?;
-    Some(DateValue {
-        anchor,
-        offset: sign * num,
-    })
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    if end == 0 {
+        return None;
+    }
+    let num: i32 = rest[..end].parse().ok()?;
+    let offset = sign * num;
+    let rest = rest[end..].trim_start();
+
+    if rest.is_empty() {
+        return Some(DateValue {
+            anchor,
+            offset,
+            time: None,
+        });
+    }
+
+    try_parse_time_suffix(
+        rest,
+        DateValue {
+            anchor,
+            offset,
+            time: None,
+        },
+    )
+}
+
+fn try_parse_time_suffix(rest: &str, base: DateValue) -> Option<DateValue> {
+    if let Some(time_str) = rest.strip_prefix('T')
+        && is_valid_time_suffix(time_str)
+    {
+        return Some(DateValue {
+            time: Some(time_str.to_string()),
+            ..base
+        });
+    }
+    None
+}
+
+fn is_valid_time_suffix(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() != 5
+        || !bytes[0].is_ascii_digit()
+        || !bytes[1].is_ascii_digit()
+        || bytes[2] != b':'
+        || !bytes[3].is_ascii_digit()
+        || !bytes[4].is_ascii_digit()
+    {
+        return false;
+    }
+
+    let hour = (bytes[0] - b'0') * 10 + bytes[1] - b'0';
+    let minute = (bytes[3] - b'0') * 10 + bytes[4] - b'0';
+    hour <= 23 && minute <= 59
 }
 
 fn parse_date_field(s: &str) -> Option<DateField> {
@@ -107,6 +166,25 @@ fn parse_condition(line: &str) -> Option<Condition> {
     }
     if line == "not done" {
         return Some(Condition::DoneFilter { done: false });
+    }
+
+    if let Some(rest) = line.strip_prefix("has time ") {
+        if let Some(field) = parse_date_field(rest.trim()) {
+            return Some(Condition::TimeExistence {
+                field,
+                present: true,
+            });
+        }
+        return None;
+    }
+    if let Some(rest) = line.strip_prefix("no time ") {
+        if let Some(field) = parse_date_field(rest.trim()) {
+            return Some(Condition::TimeExistence {
+                field,
+                present: false,
+            });
+        }
+        return None;
     }
 
     if let Some(rest) = line.strip_prefix("has ") {
@@ -188,10 +266,9 @@ fn parse_directive(line: &str) -> Option<(bool, Directive)> {
     let line = line.trim();
     let (is_sort, rest) = if let Some(r) = line.strip_prefix("sort by ") {
         (true, r)
-    } else if let Some(r) = line.strip_prefix("group by ") {
-        (false, r)
     } else {
-        return None;
+        let r = line.strip_prefix("group by ")?;
+        (false, r)
     };
 
     let parts: Vec<&str> = rest.splitn(2, ' ').collect();

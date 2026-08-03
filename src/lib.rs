@@ -1,3 +1,5 @@
+pub const SPEC_VERSION: &str = "3.0.0";
+
 pub mod bootstrap;
 pub mod cli;
 pub mod config;
