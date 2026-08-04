@@ -1,0 +1,3 @@
+[submodule "ttd-spec"]
+	path = ttd-spec
+	url = https://github.com/esatbayhan/ttd-spec.git
